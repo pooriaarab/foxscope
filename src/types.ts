@@ -76,6 +76,8 @@ export interface ScopeState {
 
 /** Where a scope keeps its state. `lock`, when there is one, orders writers across processes. */
 export interface ScopeStore {
+  /** Names the store in errors, for example the file path. */
+  name?: string;
   load(): Promise<unknown>;
   save(state: ScopeState): Promise<void>;
   lock?<T>(fn: () => Promise<T>): Promise<T>;

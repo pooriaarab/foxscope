@@ -58,7 +58,7 @@ export function createScope(o: ScopeOptions) {
   function change<T>(fn: (state: ScopeState, now: number) => Promise<T>): Promise<T> {
     const run = async () => {
       const work = async () => {
-        const state = parseState(await o.store.load());
+        const state = parseState(await o.store.load(), o.store.name);
         const now = Math.max(clock(), state.lastNow);
         state.lastNow = now;
         try {
