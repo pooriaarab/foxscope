@@ -123,7 +123,14 @@ in doubt, refuse, and say why.
 | E5 | A page opens, frames or clicks the approval page | The extension pages are not web accessible. Only a click in the extension approves | manifest has no `web_accessible_resources` |
 | E6 | The event page unloads while a request waits | The request is in `storage.local`. After the approval, the background sends the answer to the tab that asked | E2E |
 | E7 | foxprefs or foxpack answers in the wrong shape | That resolver fails (R4); the manager says so | tests/extension.test.ts |
+| E8 | An iframe on the page calls the API | The API is in the top frame only | manifest `all_frames: false` |
 | E9 | A page reads the refusal reason. `private-field: x` and `unknown-field: x` tell it which private fields the user has; `resolver-failed: memory` tells it which add-ons are installed | A page gets one refusal for everything: `denied`, as a request answer and as a thrown error, a user's deny included. The reason goes to the trail, which the manager page shows | tests/extension.test.ts, E2E |
 | E10 | The sample values are on by default, so every new install answers pages with made-up data the user never chose | The demo data is off on a fresh install. The user turns it on in the manager page | E2E |
 | E11 | A page opens the approval window under the user's pointer, and a click aimed at the page lands on Approve | Approve and Approve smaller answers stay disabled until 1 s after the window is shown or gets focus, and go back to disabled when it loses focus. A click before that does nothing. Deny works at once | E2E |
-| E8 | An iframe on the page calls the API | The API is in the top frame only | manifest `all_frames: false` |
+
+## Release
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| X1 | A release publishes to npm and AMO without running the Firefox E2E | release.yml runs the E2E on Ichabod (secret `ICHABOD_API_KEY`) and `ci:local` first; npm publish needs both, and the AMO submission needs npm publish | tests/release.test.ts |
+| X2 | Every release step, `pnpm install` included, runs with `contents: write` and `id-token: write` | The workflow grants nothing by default. Each job gets only what it needs: `id-token: write` only in the npm publish job, `contents: write` only in the job that creates the GitHub release | tests/release.test.ts |
