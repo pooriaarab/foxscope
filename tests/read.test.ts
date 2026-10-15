@@ -39,6 +39,38 @@ describe("read", () => {
     expect((await kinds()).slice(-2)).toEqual(["scent.revoke", "scent.read.refused"]);
   });
 
+  it("G1, G2: a revoke or an expiry while the resolver answers gives no values", async () => {
+    const gate = { hold: false, entered: () => {}, release: () => {} };
+    const { resolver } = fakeResolver("x", [{ name: "x.size", label: "Size", sensitivity: "ask" }], async (names) => {
+      if (gate.hold) {
+        gate.entered();
+        await new Promise<void>((r) => (gate.release = r));
+      }
+      return Object.fromEntries(names.map((n) => [n, "secret"]));
+    });
+    const { scope, clock, kinds } = await setup({ resolvers: [resolver], rules: [{ agent: shop.agent, fields: "x.*", maxTtlSeconds: 60 }] });
+    const slowRead = async (grantId: string, during: () => Promise<unknown> | void) => {
+      gate.hold = true;
+      const entered = new Promise<void>((r) => (gate.entered = r));
+      const read = code(scope.read(grantId));
+      await entered;
+      gate.hold = false;
+      await during();
+      gate.release();
+      return read;
+    };
+    const grant = async (purpose: string) => {
+      const answer = await scope.request({ agent: shop.agent, fields: ["x.size"], purpose });
+      if (answer.status !== "granted") throw new Error(`expected a grant, got ${JSON.stringify(answer)}`);
+      return answer.grantId;
+    };
+    const revoked = await grant("one");
+    expect(await slowRead(revoked, () => scope.revoke(revoked))).toBe("revoked");
+    expect((await kinds()).slice(-2)).toEqual(["scent.revoke", "scent.read.refused"]);
+    const expiring = await grant("two");
+    expect(await slowRead(expiring, () => clock.advance(60))).toBe("expired");
+  });
+
   it("G3: refuses a field the grant does not hold", async () => {
     const { scope, grantId } = await granted();
     expect(await code(scope.read(grantId, ["demo.travel.home"]))).toBe("field-not-granted");
