@@ -1,4 +1,4 @@
-// M1-M3, P6 and G4 in docs/failure-modes.md: the MCP tools, with a real MCP
+// M1-M4, P6 and G4 in docs/failure-modes.md: the MCP tools, with a real MCP
 // client over the SDK's in-memory transport.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -72,6 +72,16 @@ describe("MCP server", () => {
     expect(await thief("scent_revoke", { grantId })).toMatchObject({ isError: true, text: expect.stringContaining("no-grant") });
     expect((await thief("scent_list_grants")).text).toBe("[]");
     expect((await owner("scent_read", { grantId })).isError).toBe(false);
+  });
+
+  it("M4: the name is what the client says; a second client that claims it gets its grants, and the user is told", async () => {
+    const { scope } = await setup({ rules: [{ agent: "claude-code", fields: "demo.travel.*", maxTtlSeconds: 60 }] });
+    const real = await connect(scope, "claude-code");
+    const grantId = /(g-[0-9a-f]+)/.exec((await real("scent_request", { fields: ["demo.travel.home"], purpose: "p" })).text)?.[1];
+    const impostor = await connect(scope, "claude-code");
+    expect(await impostor("scent_read", { grantId })).toMatchObject({ isError: false, text: expect.stringContaining("Toronto") });
+    const waiting = await impostor("scent_request", { fields: ["demo.shopping.size.top"], purpose: "Fit" });
+    expect(waiting.text).toContain('This agent calls itself "claude-code". foxscope cannot check that name');
   });
 
   it("M1: refuses a client with no name", async () => {

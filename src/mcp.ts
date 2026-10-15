@@ -1,5 +1,6 @@
 // The MCP server: an agent asks for context over stdio. The agent is the
 // client name from the MCP handshake; each tool sees that agent's grants only.
+// Nothing on stdio proves that name: any local program can claim it (M4).
 import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -53,7 +54,11 @@ export function createMcpServer(o: McpOptions): McpServer {
       const answer = await o.scope.request({ agent: name, fields: args.fields, purpose: args.purpose, ...(args.ttlSeconds === undefined ? {} : { ttlSeconds: args.ttlSeconds }) });
       if (answer.status === "denied") return text(`foxscope denied the request: ${answer.reason}`, true);
       if (answer.status === "pending") {
-        return text(`The user must approve request ${answer.requestId} first. Ask the user to run:\n\n  ${o.approveCommand} ${answer.requestId}\n\nThen call scent_request again with the same fields and purpose.`);
+        return text(
+          `The user must approve request ${answer.requestId} first. Ask the user to run:\n\n  ${o.approveCommand} ${answer.requestId}\n\n` +
+            `This agent calls itself ${JSON.stringify(name)}. foxscope cannot check that name: any program on this computer can give it, and gets the grants and rules of that name.\n\n` +
+            "Then call scent_request again with the same fields and purpose.",
+        );
       }
       return text(`Granted: grant ${answer.grantId}, until ${answer.expiresAt}. Use scent_read with this grant id to read again.\n${JSON.stringify(answer.values, null, 2)}`);
     },
