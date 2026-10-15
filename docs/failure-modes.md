@@ -1,9 +1,116 @@
 # Failure modes
 
-Write every way foxscope can fail before you write the code. Then write a test
-for each failure mode, and commit the tests before the code. Prefer an E2E
-check. Write an isolated test only when an E2E check cannot reach the failure.
+Every way foxscope can fail, written before the code. Each row names the
+behaviour we want and the test that checks it. A test file names the rows it
+covers. Prefer an E2E check. Write an isolated test only when an E2E check
+cannot reach the failure.
+
+foxscope stands between an agent and the user's context. The worst failure is
+a value that reaches an agent without a grant. So the rule for every row: when
+in doubt, refuse, and say why.
+
+## Requests (input from an agent)
 
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
-| F1 | FILL: what goes wrong | FILL: what the code does then | FILL: the test or E2E check |
+| I1 | A request has no agent, an agent over 200 characters, or an agent with control characters | `denied`, reason `bad-request: agent ...` | tests/fields.test.ts, tests/request.test.ts |
+| I2 | `fields` is not an array, is empty, has more than 50 names, repeats a name, or holds a name that is not `<namespace>.<path>` | `denied`, reason `bad-request: fields ...` | tests/fields.test.ts |
+| I3 | `purpose` is missing, empty, or over 500 characters | `denied`, reason `bad-request: purpose ...` | tests/fields.test.ts |
+| I4 | `ttlSeconds` is not a whole number, is 0 or less, or is over 30 days | `denied`, reason `bad-request: ttlSeconds ...` | tests/fields.test.ts |
+| I5 | A field name has no resolver, or its resolver does not list it | `denied`, reason `unknown-field: <name>` | tests/request.test.ts |
+| I6 | An agent sends the same request again while it waits | The same `requestId`; no second pending entry | tests/request.test.ts |
+| I7 | An agent floods requests | After 30 requests in one minute: `denied` `rate-limited`. Only the first refusal in that minute goes to the trail, so a flood cannot fill it | tests/request.test.ts |
+| I8 | More than 50 requests wait at one time | `denied` `too-many-pending` | tests/request.test.ts |
+
+## Private data
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| P1 | A request names a `private` field | `denied` `private-field: <name>`, also when a standing rule matches the field. No approval is ever asked | tests/request.test.ts, E2E |
+| P2 | A field becomes `private` after the grant | `read` refuses it with `private-field` | tests/read.test.ts |
+| P3 | A resolver returns more keys than were asked for | foxscope drops the extra keys | tests/resolvers.test.ts |
+| P4 | A resolver lists a field outside its own namespace | foxscope ignores that field, so a resolver cannot answer for another one | tests/fields.test.ts |
+| P5 | The trail holds a granted value | Never. The trail holds field names, ids and the purpose, not values | tests/trail.test.ts |
+| P6 | An MCP agent lists the fields | It does not see `private` fields at all | tests/mcp.test.ts |
+| P7 | A grant says "smaller answers" (`derive`) | The resolver gets `derive: true`. A field with no smaller form comes back as it is, and the approval page says which fields have one | tests/resolvers.test.ts, tests/read.test.ts |
+| P8 | A resolver returns more than 256 KB | `read` fails with `resolver-failed` | tests/resolvers.test.ts |
+
+## Consent and grants
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| G1 | A read on an expired grant | `expired`, and no values | tests/read.test.ts, E2E |
+| G2 | A read on a revoked grant | `revoked`, and no values | tests/read.test.ts, E2E |
+| G3 | A read asks for a field that the grant does not hold | `field-not-granted` | tests/read.test.ts |
+| G4 | A read on an unknown grant id, or on a grant of another agent | `no-grant`. The two look the same, so an agent cannot probe other grants | tests/read.test.ts, tests/mcp.test.ts |
+| G5 | The clock goes back | foxscope keeps the latest time it saw, so an expired grant stays expired | tests/read.test.ts |
+| G6 | The approval page shows one request and another one is approved | `approve` takes the digest the page showed. A different digest fails with `request-changed` | tests/approve.test.ts |
+| G7 | An agent changes the fields or the purpose after an approval | It is a new request and needs a new approval. A grant covers only its own fields and purpose | tests/approve.test.ts |
+| G8 | A standing rule covers only some of the fields | `pending` for the whole request, not a part grant | tests/rules.test.ts |
+| G9 | A rule allows a longer time than the request asks, or the request asks more than the rule allows | The grant gets the shorter of the two | tests/rules.test.ts |
+| G10 | A rule for agent A meets a request from agent B | No match. Agent names match exactly; there is no wildcard agent | tests/rules.test.ts |
+| G11 | A rule glob such as `**` covers every namespace | Refused with `bad-rule`. A glob starts with a fixed namespace | tests/fields.test.ts, tests/rules.test.ts |
+| G12 | A request waits longer than 10 minutes | It expires. `approve` fails with `expired`; `pending()` does not show it | tests/approve.test.ts |
+| G13 | A request is approved twice, or approved after a deny | `not-found`. A decision removes the request | tests/approve.test.ts |
+| G14 | The user revokes an agent | Its grants are revoked, its pending requests are dropped, and its standing rules are removed, so the next request asks again | tests/rules.test.ts |
+| G15 | `approve` gets a time over 30 days | `bad-ttl` | tests/approve.test.ts |
+
+## Trail
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| T1 | An action leaves no trace | Each request, refusal, grant, denial, read, refused read, revoke and rule change adds one foxtrail entry | tests/trail.test.ts |
+| T2 | The trail cannot be written | The action fails and returns no values. foxscope writes the trail before it reads a value | tests/trail.test.ts |
+| T3 | Someone edits the trail | `verifyTrail()` returns `ok: false` with the index of the first bad entry | tests/trail.test.ts, E2E |
+
+## Notice
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| N1 | The notice callback throws | The read fails with `notice-failed` and returns no values. A read the user cannot see does not happen | tests/read.test.ts |
+| N2 | An agent reads in the browser | One browser notification per read, and the read shows in the manager page | E2E |
+
+## Resolvers
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| R1 | Two resolvers have the same namespace | `createScope` throws `bad-resolvers` | tests/resolvers.test.ts |
+| R2 | A resolver throws in `list` or `read` | `denied` `resolver-failed: <namespace>` on a request, `resolver-failed` on a read. Other namespaces still work | tests/resolvers.test.ts |
+| R3 | A resolver never answers | It fails after 5 s with `resolver-failed` (timeout) | tests/resolvers.test.ts |
+| R4 | A resolver returns a field list in the wrong shape | `resolver-failed`; foxscope does not guess | tests/fields.test.ts |
+| R5 | foxprefs or foxpack is not installed | The CLI and the MCP server run without it and say "not installed". The extension says the same when `runtime.sendMessage` fails | tests/node.test.ts, E2E |
+| R6 | foxprefs is installed but has no `prefsResolver` export | The CLI stops with a message that names the package | tests/node.test.ts |
+
+## Store
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| S1 | `state.json` is not JSON, or has the wrong shape or version | `corrupt-store` with the path. foxscope does not overwrite it | tests/state.test.ts, tests/node.test.ts |
+| S2 | The CLI approves while the MCP server writes | A lock file orders the writers, so no change is lost | tests/node.test.ts |
+| S3 | The process stops in the middle of a write | foxscope writes a temp file and renames it, so `state.json` is always whole | tests/node.test.ts |
+| S4 | A crashed process leaves the lock file | After 10 s the next writer takes the lock | tests/node.test.ts |
+| S5 | `FOXSCOPE_HOME` is not set | `~/.foxscope`, made with mode 0700. The files have mode 0600 | tests/node.test.ts |
+
+## CLI and MCP server
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| C1 | An unknown command or a missing argument | Usage on stderr, exit 2 | tests/cli.test.ts |
+| C2 | A command fails (`not-found`, `corrupt-store` ...) | The code and the message on stderr, exit 1 | tests/cli.test.ts |
+| C3 | The user approves an id without knowing what it is | `approve` prints the agent, the fields and the purpose it approved. `pending` shows them first | tests/cli.test.ts |
+| M1 | The MCP client sends no name | Every tool refuses: foxscope needs a name to scope the grants | tests/mcp.test.ts |
+| M2 | An MCP agent reads or revokes the grant of another agent | `no-grant` | tests/mcp.test.ts |
+| M3 | A request waits for the user | The tool result names the exact command: `foxscope approve <id>` | tests/mcp.test.ts |
+
+## Extension and web pages
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| E1 | A hostile page passes getters, proxies or odd types to `window.scent.request` | The content script copies plain data only, checks it, and rejects anything else | E2E |
+| E2 | A page claims to be another agent | The agent is the page origin that Firefox reports for the sender. The page cannot set it | E2E |
+| E3 | A page reads a grant of another origin | `no-grant` (G4) | E2E |
+| E4 | A page asks for a private field | Refused at once. No approval page opens (P1) | E2E |
+| E5 | A page opens, frames or clicks the approval page | The extension pages are not web accessible. Only a click in the extension approves | manifest has no `web_accessible_resources` |
+| E6 | The event page unloads while a request waits | The request is in `storage.local`. After the approval, the background sends the answer to the tab that asked | E2E |
+| E7 | foxprefs or foxpack answers in the wrong shape | That resolver fails (R4); the manager says so | tests/extension.test.ts |
+| E8 | An iframe on the page calls the API | The API is in the top frame only | manifest `all_frames: false` |
