@@ -2,7 +2,7 @@
 // extension, with the page API also on 127.0.0.1 and localhost) and plays a
 // shop agent page (e2e/site/index.html) against it, as a user would:
 //
-//   1. The page asks for a private field: refused at once, nothing waits (P1, E4).
+//   1. The page asks for a private field: refused at once with "denied", nothing waits (P1, E4, E9).
 //   2. A hostile call with a getter, a proxy or a made-up agent gets nothing (E1, E2).
 //   3. The page asks for two sizes and a budget. The request shows in the
 //      manager page; the test approves it with smaller answers on the approval page.
@@ -40,7 +40,7 @@ try {
 
   // 1. A private field: refused at once.
   await click(page, "#ask-private");
-  check("a private field is refused", { status: "denied", reason: "private-field: demo.health.allergies" }, await status("denied"));
+  check("a private field is refused with the one page refusal", { status: "denied", reason: "denied" }, await status("denied"));
 
   // 2. Hostile calls.
   const hostile = await page.evaluate(async () => {
@@ -54,7 +54,7 @@ try {
       replaced: (() => { window.scent = { request: () => "fake" }; return typeof window.scent.request === "function" && window.scent.request.toString().includes("native"); })(),
     };
   });
-  check("a getter on the request gives nothing", { status: "denied", reason: "bad-request: fields must be a non-empty array" }, hostile.getter.value);
+  check("a getter on the request gives nothing", { status: "denied", reason: "denied" }, hostile.getter.value);
   check("a proxy request is rejected", "foxscope: purpose must be a string", hostile.proxy.error);
   check("a public field is granted without asking", { "demo.profile.name": "Sam Fox" }, hostile.spoof.value?.values);
   check("the page cannot replace window.scent", true, hostile.replaced);
@@ -99,7 +99,7 @@ try {
   if (!remote) {
     const other = await fox.open(`${site.url.replace("127.0.0.1", "localhost")}/index.html`);
     await poll(other, () => typeof window.scent?.read === "function");
-    check("another origin cannot read the grant", true, (await other.evaluate((id) => window.scent.read(id).then(() => "read", (e) => e.message), grantId)).includes("no-grant"));
+    check("another origin cannot read the grant", "foxscope: denied", await other.evaluate((id) => window.scent.read(id).then(() => "read", (e) => e.message), grantId));
     await other.close();
   } else record.skipped.push({ name: "another origin cannot read the grant", reason: "Ichabod: both pages share the tunnel origin; tests/read.test.ts G4 covers it" });
 
@@ -109,7 +109,7 @@ try {
   await poll(manager, (id) => !document.querySelector(`[data-grant="${id}"]`), grantId);
   await click(page, "#read");
   const refused = await status("error");
-  check("a read after the revoke fails", true, refused.error?.includes("revoked"));
+  check("a read after the revoke fails with the one page refusal", "foxscope: denied", refused.error);
 
   // 8. The trail verifies.
   await sleep(500);
