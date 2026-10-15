@@ -54,6 +54,7 @@ in doubt, refuse, and say why.
 | G13 | A request is approved twice, or approved after a deny | `not-found`. A decision removes the request | tests/approve.test.ts |
 | G14 | The user revokes an agent | Its grants are revoked, its pending requests are dropped, and its standing rules are removed, so the next request asks again | tests/rules.test.ts |
 | G15 | `approve` gets a time over 30 days | `bad-ttl` | tests/approve.test.ts |
+| G16 | The user removes a standing rule, and the grants it made stay live until they expire (up to the rule's longest time) | Removing a rule revokes every live grant that the rule made. The trail entry counts them. Grants the user approved stay | tests/rules.test.ts |
 
 ## Trail
 
