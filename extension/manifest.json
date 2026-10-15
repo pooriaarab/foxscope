@@ -46,5 +46,9 @@
       "run_at": "document_start",
       "all_frames": false
     }
-  ]
+  ],
+  "options_ui": {
+    "page": "manager.html",
+    "open_in_tab": true
+  }
 }
