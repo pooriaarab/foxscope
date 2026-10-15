@@ -1,4 +1,4 @@
-// T1-T4 and P5 in docs/failure-modes.md: the tamper-evident trail.
+// T1-T5 and P5 in docs/failure-modes.md: the tamper-evident trail.
 import { describe, expect, it } from "vitest";
 import { MemoryStore, type Entry, type Store } from "foxtrail";
 import { SIZES, setup, shop } from "./helpers.js";
@@ -34,6 +34,20 @@ describe("trail", () => {
       ["public", "mcp-agent", "Say hello"],
       ["user", shop.agent, "Plan a trip"],
     ]);
+  });
+
+  it("T5: how much one site can add to the trail: 31 request entries a minute, one per read of its own grant, none for a guessed id", async () => {
+    const { scope, kinds, clock } = await setup({ rules: [{ agent: "https://shop.example", fields: "demo.travel.*", maxTtlSeconds: 600 }] });
+    for (let i = 0; i < 200; i++) await scope.request({ ...shop, agent: `https://s${i}.shop.example`, fields: ["demo.nope"] });
+    expect((await kinds()).length).toBe(31);
+    clock.advance(61);
+    const granted = await scope.request({ ...shop, fields: ["demo.travel.home"] });
+    if (granted.status !== "granted") throw new Error("expected granted");
+    const before = (await kinds()).length;
+    for (let i = 0; i < 50; i++) await scope.read(granted.grantId, undefined, { agent: shop.agent });
+    expect((await kinds()).length - before).toBe(50);
+    for (let i = 0; i < 50; i++) await scope.read(`g-guess${i}`, undefined, { agent: shop.agent }).catch(() => {});
+    expect((await kinds()).length - before).toBe(50);
   });
 
   it("P5: the trail holds field names, not values", async () => {
