@@ -107,6 +107,7 @@ in doubt, refuse, and say why.
 | C2 | A command fails (`not-found`, `corrupt-store` ...) | The code and the message on stderr, exit 1 | tests/cli.test.ts |
 | C3 | The user approves an id without knowing what it is | `approve` prints the agent, the fields and the purpose it approved. `pending` shows them first | tests/cli.test.ts |
 | C4 | An agent tells the user to run `foxscope approve <id>`, and the user approves whatever the agent said it was | `approve` first prints the whole request: agent, fields, purpose, time and the first 12 characters of its digest. At a terminal it asks `[y/N]`; anything but yes grants nothing. Without a terminal it grants only with `--yes --digest <those 12 characters>`. The approval is bound to the full digest it showed (`request-changed` otherwise) | tests/cli.test.ts |
+| C5 | An agent name or a purpose holds bidi or invisible characters (U+202E, U+200B ...), so the terminal shows the user something other than what the request holds | The CLI prints control, bidi and invisible characters in the agent, the purpose, a field label and the trail as `\u{...}` escapes, as the approval page does | tests/cli.test.ts |
 | M1 | The MCP client sends no name | Every tool refuses: foxscope needs a name to scope the grants | tests/mcp.test.ts |
 | M2 | An MCP agent reads or revokes the grant of another agent | `no-grant` | tests/mcp.test.ts |
 | M3 | A request waits for the user | The tool result names the exact command: `foxscope approve <id>` | tests/mcp.test.ts |

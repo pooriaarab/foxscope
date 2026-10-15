@@ -1,4 +1,4 @@
-// C1-C3 in docs/failure-modes.md: the foxscope command.
+// C1-C5 in docs/failure-modes.md: the foxscope command.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -97,6 +97,23 @@ describe("foxscope CLI", () => {
     expect((await script("grants")).out).toBe("No live grants.\n");
     const digest = digestOf(blind.out)!;
     expect((await script("--demo", "approve", r3, "--yes", "--digest", digest)).code).toBe(0);
+  });
+
+  it("C5: shows bidi and invisible characters in the agent and the purpose as escapes", async () => {
+    const run = cli();
+    const agent = "shop\u202Etnega";
+    const asked = await run("--demo", "request", agent, "demo.shopping.size.top", "--purpose", "Pick\u200B clothes\u2066");
+    const id = /pending (r-[0-9a-f]+)/.exec(asked.out)![1]!;
+    const listed = await run("--demo", "pending");
+    const blind = await run("--demo", "approve", id);
+    const approved = await run("--demo", "approve", id, "--yes", "--digest", digestOf(blind.out)!);
+    const grants = await run("grants");
+    const revoked = await run("revoke", "--agent", agent);
+    for (const out of [listed.out, blind.out, approved.out, grants.out, revoked.out]) {
+      expect(out).not.toMatch(/[\u200B\u202E\u2066]/);
+      expect(out).toContain("shop\\u{202e}tnega");
+    }
+    expect(approved.out).toContain("Purpose: \"Pick\\u{200b} clothes\\u{2066}\"");
   });
 
   it("adds, lists and removes standing rules, and revokes an agent", async () => {
