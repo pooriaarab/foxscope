@@ -97,6 +97,25 @@ try {
   const approve = await fox.openExtensionPage(`approve.html#${requestId}`);
   const shown = await poll(approve, () => !document.getElementById("request").hidden && { agent: document.getElementById("agent").textContent, purpose: document.getElementById("purpose").textContent, labels: [...document.querySelectorAll("#fields .label")].map((l) => l.textContent), smaller: !document.getElementById("smaller").hidden });
   check("the approval page shows origin, purpose and each field", { agent: origin, purpose: "Find clothes that fit you, inside your budget", labels: ["Top size", "Shoe size", "Monthly clothes budget"], smaller: true }, shown);
+  // A click aimed at the page must not land on Approve (E11): it wakes 1 s after the window gets focus.
+  const delay = await approve.evaluate(async () => {
+    // It runs in the page, so it must be defined in the page.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
+    const state = () => ["approve", "smaller"].map((id) => document.getElementById(id).disabled);
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    window.dispatchEvent(new Event("blur"));
+    const blurred = state();
+    window.dispatchEvent(new Event("focus"));
+    const focused = state();
+    document.getElementById("approve").click();
+    await wait(400);
+    const soon = state();
+    const decided = document.getElementById("decision").textContent;
+    await wait(900);
+    return { blurred, focused, soon, decided, later: state() };
+  });
+  check("Approve wakes 1 s after the window gets focus, and a click before that does nothing", { blurred: [true, true], focused: [true, true], soon: [true, true], decided: "", later: [false, false] }, delay);
   check("the approval page offers no time over 1 hour", [300, 900, 3600], await approve.evaluate(() => [...document.querySelectorAll("#ttl option")].map((o) => Number(o.value))));
   check("the rule form offers no time over 1 hour", [300, 900, 3600], await manager.evaluate(() => [...document.querySelectorAll("#rule-ttl option")].map((o) => Number(o.value))));
   await click(approve, "#smaller");
