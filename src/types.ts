@@ -72,6 +72,8 @@ export interface ScopeState {
   rules: Rule[];
   grants: Grant[];
   requests: PendingRequest[];
+  /** The rate limit by site (siteOf): request times in ms of the last minute, and the last refusal that went to the trail. Kept here so a restart does not reset it. */
+  rate: Record<string, { times: number[]; refusedAt?: number }>;
 }
 
 /** Where a scope keeps its state. `lock`, when there is one, orders writers across processes. */
