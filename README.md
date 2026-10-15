@@ -93,7 +93,7 @@ Checked on 2026-10-15 against the [Solid Protocol](https://solidproject.org/TR/p
 |---|---|---|---|
 | Where the data is | Your browser or your computer | Storages on servers | The resource server |
 | Unit of access | Named fields | Resources, with WAC or ACP rules | Scope strings that the authorization server defines |
-| Time limit | Each grant expires (1 s to 30 days) | Not set by the protocol | Token lifetime (`expires_in`) |
+| Time limit | Each grant expires (1 s to 30 days; at most 1 hour for a web page) | Not set by the protocol | Token lifetime (`expires_in`) |
 | Smaller answers | Yes, per field (`derive`) | No | No |
 | Notice per use | Yes | No | No |
 | Audit trail | Tamper-evident, built in | Not in the protocol | Not in the protocol |
@@ -138,7 +138,7 @@ In Node, the CLI imports `foxprefs` and `foxpack` when they are installed next t
 
 | Export | What it does |
 |---|---|
-| `createScope({ resolvers, store, trail, rules?, notify?, now?, resolverTimeoutMs?, grantPublic? })` | Returns a scope. `trail` is a foxtrail `Log`. `rules` are standing rules from your config. `notify` runs before each read. `grantPublic` (default false) grants `public` fields without asking; use it for local agents only. |
+| `createScope({ resolvers, store, trail, rules?, notify?, now?, resolverTimeoutMs?, grantPublic?, maxGrantSeconds? })` | Returns a scope. `trail` is a foxtrail `Log`. `rules` are standing rules from your config. `notify` runs before each read. `grantPublic` (default false) grants `public` fields without asking; use it for local agents only. `maxGrantSeconds` (default 30 days) caps every grant and rule. |
 | `scope.request(req)` | Returns a `ScentResponse`. Policy refusals are `denied` with a reason. |
 | `scope.approve(requestId, { ttlSeconds?, derive?, digest? })` | The user's yes. Pass the `digest` you showed. Returns the grant. Default time: what the agent asked, else 1 hour. |
 | `scope.deny(requestId)` | The user's no. |
@@ -207,6 +207,7 @@ The agent is the page origin. A page gets one refusal for everything, `denied`: 
 A request that needs you opens an approval window: the origin, the purpose, each field with its sensitivity, and the time, with Approve, Approve smaller answers and Deny.
 The manager page shows live grants with a countdown, waiting requests, standing rules, recent reads, the trail with Verify, and which of foxprefs and foxpack are installed.
 Each read shows a Firefox notification.
+A page grant lasts at most 1 hour, whatever the page asks; the approval page and the rule form offer nothing longer.
 The demo data (made-up values in the `demo` namespace) is off on a fresh install; turn it on in the manager page to try foxscope.
 
 ```bash

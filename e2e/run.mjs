@@ -97,6 +97,8 @@ try {
   const approve = await fox.openExtensionPage(`approve.html#${requestId}`);
   const shown = await poll(approve, () => !document.getElementById("request").hidden && { agent: document.getElementById("agent").textContent, purpose: document.getElementById("purpose").textContent, labels: [...document.querySelectorAll("#fields .label")].map((l) => l.textContent), smaller: !document.getElementById("smaller").hidden });
   check("the approval page shows origin, purpose and each field", { agent: origin, purpose: "Find clothes that fit you, inside your budget", labels: ["Top size", "Shoe size", "Monthly clothes budget"], smaller: true }, shown);
+  check("the approval page offers no time over 1 hour", [300, 900, 3600], await approve.evaluate(() => [...document.querySelectorAll("#ttl option")].map((o) => Number(o.value))));
+  check("the rule form offers no time over 1 hour", [300, 900, 3600], await manager.evaluate(() => [...document.querySelectorAll("#rule-ttl option")].map((o) => Number(o.value))));
   await click(approve, "#smaller");
   check("the approval page confirms", true, (await poll(approve, () => document.getElementById("decision").textContent)).startsWith("Approved with smaller answers"));
 

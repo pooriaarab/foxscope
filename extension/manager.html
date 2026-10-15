@@ -15,13 +15,13 @@
   <div id="rules" class="list"><p class="note empty">No standing rules. Every request asks you.</p></div>
   <fieldset>
     <legend>Add a rule</legend>
-    <p class="note">The agent gets matching fields without a question, for at most this time. Private fields are never given.</p>
+    <p class="note">The agent gets matching fields without a question, for at most this time (1 hour is the most for a web page). Private fields are never given.</p>
     <div class="row">
       <label>Agent <input id="rule-agent" type="text" placeholder="https://shop.example"></label>
       <label>Fields <input id="rule-fields" type="text" placeholder="demo.shopping.*"></label>
     </div>
     <div class="row">
-      <label>Up to <select id="rule-ttl"><option value="300">5 minutes</option><option value="3600" selected>1 hour</option><option value="86400">1 day</option><option value="604800">7 days</option></select></label>
+      <label>Up to <select id="rule-ttl"><option value="300">5 minutes</option><option value="900">15 minutes</option><option value="3600" selected>1 hour</option></select></label>
       <label class="switch"><input id="rule-derive" type="checkbox"> Smaller answers only</label>
     </div>
     <button id="rule-add">Add rule</button> <span id="rule-status" class="note" role="status"></span>
