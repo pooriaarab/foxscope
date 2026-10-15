@@ -3,7 +3,7 @@
 // page, and shows a notice on each read. Web pages reach it through
 // content.js only; the extension pages reach it with "ui.*" messages.
 import { IdbStore, Log, idbKey } from "foxtrail";
-import { KNOWN_RESOLVERS, createScope, demoResolver, messageResolver, storageAreaStore } from "../src/index.ts";
+import { KNOWN_RESOLVERS, PAGE_REFUSAL, createScope, demoResolver, messageResolver, pageError, pageResponse, storageAreaStore } from "../src/index.ts";
 
 const store = browser.storage.local;
 const get = async (key, fallback) => (await store.get(key))[key] ?? fallback;
@@ -61,7 +61,7 @@ const pageHandlers = {
       await store.set({ "fsc:waiting": waiting });
       if (fresh) await browser.windows.create({ type: "popup", url: browser.runtime.getURL(`approve.html#${response.requestId}`), width: 480, height: 640 });
     }
-    return response;
+    return pageResponse(response);
   },
   "page.read": async (msg, agent) => (await scope()).read(msg.grantId, msg.fields, { agent }),
   "page.revoke": async (msg, agent) => {
@@ -94,7 +94,7 @@ const uiHandlers = {
   },
   async "ui.deny"({ requestId }) {
     await (await scope()).deny(requestId);
-    await answerTab(requestId, { status: "denied", reason: "the user denied the request" });
+    await answerTab(requestId, { status: "denied", reason: PAGE_REFUSAL });
     return true;
   },
   "ui.revoke": async ({ grantId }) => (await scope()).revoke(grantId),
@@ -120,7 +120,8 @@ browser.runtime.onMessage.addListener((msg, sender) => {
       origin = "null";
     }
     if (!sender.tab || sender.frameId !== 0 || !/^https?:/.test(origin)) return undefined;
-    run = () => pageHandlers[type](msg, origin, sender);
+    // A page gets "denied" for every refusal (E9); the reason is in the trail.
+    return pageHandlers[type](msg, origin, sender).then((value) => ({ ok: true, value }), pageError);
   } else if (ownPage(sender) && Object.hasOwn(uiHandlers, type)) {
     run = () => uiHandlers[type](msg, sender);
   } else return undefined;

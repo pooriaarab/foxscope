@@ -1,6 +1,8 @@
-// E7 and R5 in docs/failure-modes.md, for the extension: foxprefs and foxpack over runtime.sendMessage.
+// E7, E9 and R5 in docs/failure-modes.md, for the extension: foxprefs and
+// foxpack over runtime.sendMessage, and what a web page gets back.
 import { describe, expect, it } from "vitest";
-import { messageResolver, type SendMessage } from "../src/index.js";
+import { messageResolver, pageError, pageResponse, ScopeError, type SendMessage } from "../src/index.js";
+import { setup } from "./helpers.js";
 import { resolverSet } from "../src/resolvers.js";
 
 const absent: SendMessage = () => Promise.reject(new Error("Could not establish connection. Receiving end does not exist."));
@@ -36,5 +38,29 @@ describe("messageResolver", () => {
     }
     const set = resolverSet([messageResolver({ namespace: "prefs", extensionId: "x", send: async (_id, m) => ((m as { type: string }).type === "scent.list" ? fields : "M") })]);
     await expect(set.resolve(["prefs.shopping.size.top"], false)).rejects.toMatchObject({ code: "resolver-failed" });
+  });
+});
+
+describe("what a page gets back", () => {
+  it("E9: every refusal is the same word, and the reason stays in the trail", async () => {
+    const { scope, entries } = await setup();
+    const page = "https://shop.example";
+    const answers = [
+      await scope.request({ agent: page, fields: ["demo.health.allergies"], purpose: "p" }),
+      await scope.request({ agent: page, fields: ["demo.health.nothing"], purpose: "p" }),
+      await scope.request({ agent: page, fields: ["memory.notes.x"], purpose: "p" }),
+      await scope.request({ agent: page, fields: [], purpose: "p" }),
+    ];
+    expect(answers.map((a) => a.status === "denied" && a.reason)).toEqual(["private-field: demo.health.allergies", "unknown-field: demo.health.nothing", "unknown-field: memory.notes.x", "bad-request: fields must be a non-empty array"]);
+    expect(answers.map(pageResponse)).toEqual(Array.from({ length: 4 }, () => ({ status: "denied", reason: "denied" })));
+    expect((await entries()).map((e) => (e.data as { reason: string }).reason)).toEqual(["private-field: demo.health.allergies", "unknown-field: demo.health.nothing", "unknown-field: memory.notes.x", "bad-request"]);
+    const pending = await scope.request({ agent: page, fields: ["demo.travel.home"], purpose: "p" });
+    expect(pageResponse(pending)).toEqual(pending);
+  });
+
+  it("E9: a thrown refusal or any other error is the same word", () => {
+    for (const error of [new ScopeError("revoked", "grant g-1 was revoked"), new ScopeError("no-grant", "no grant g-2"), new ScopeError("resolver-failed", "the memory resolver failed"), new Error("boom")]) {
+      expect(pageError(error)).toEqual({ ok: false, code: "denied", error: "denied" });
+    }
   });
 });

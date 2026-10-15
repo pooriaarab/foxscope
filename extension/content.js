@@ -31,7 +31,8 @@ function copyRequest(input) {
 
 async function send(msg) {
   const reply = await browser.runtime.sendMessage(msg);
-  if (!reply?.ok) throw fail(reply ? `${reply.code}: ${reply.error}` : "no answer from the extension");
+  // Every refusal is "denied"; the background keeps the reason from the page (E9).
+  if (!reply?.ok) throw fail(reply ? reply.error : "no answer from the extension");
   return reply.value;
 }
 

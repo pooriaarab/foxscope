@@ -202,7 +202,8 @@ await window.scent.read(answer.grantId);
 await window.scent.revoke(answer.grantId);
 ```
 
-The agent is the page origin. A request that needs you opens an approval window: the origin, the purpose, each field with its sensitivity, and the time, with Approve, Approve smaller answers and Deny.
+The agent is the page origin. A page gets one refusal for everything, `denied`: a private field, an unknown field, a missing add-on, an ended grant and your deny look the same to it. The reason is in the trail on the manager page.
+A request that needs you opens an approval window: the origin, the purpose, each field with its sensitivity, and the time, with Approve, Approve smaller answers and Deny.
 The manager page shows live grants with a countdown, waiting requests, standing rules, recent reads, the trail with Verify, and which of foxprefs and foxpack are installed.
 Each read shows a Firefox notification.
 
