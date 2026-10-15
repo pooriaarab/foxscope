@@ -25,8 +25,8 @@ async function notify(n) {
   await store.set({ "fsc:notices": [{ at: new Date().toISOString(), ...n }, ...notices].slice(0, MAX_NOTICES) });
 }
 
-// The demo data is on until the user turns it off in the manager page.
-const demoOn = () => get("fsc:demo", true);
+// The demo data is off until the user turns it on in the manager page (E10).
+const demoOn = () => get("fsc:demo", false);
 
 // One scope per event page, so its queue orders every change. A new one only when the demo switch moves.
 let current;

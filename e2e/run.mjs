@@ -2,6 +2,8 @@
 // extension, with the page API also on 127.0.0.1 and localhost) and plays a
 // shop agent page (e2e/site/index.html) against it, as a user would:
 //
+//   0. On a fresh install the demo data is off: a demo request is refused at
+//      once (E10). The test turns the demo data on in the manager page.
 //   1. The page asks for a private field: refused at once with "denied", nothing waits (P1, E4, E9).
 //   2. A hostile call with a getter, a proxy or a made-up agent gets nothing (E1, E2).
 //      Its public field waits for the user like any other (G17); the user denies it.
@@ -39,6 +41,14 @@ try {
   await poll(page, () => typeof window.scent?.request === "function");
   const status = (state) => poll(page, (s) => document.getElementById("status").dataset.state === s && JSON.parse(document.getElementById("result").textContent), state, 60_000);
 
+  // 0. The demo data is off until the user turns it on.
+  await click(page, "#ask");
+  check("a fresh install gives no demo values", { status: "denied", reason: "denied" }, await status("denied"));
+  const manager = await fox.openExtensionPage("manager.html");
+  check("the demo switch is off on a fresh install", false, await poll(manager, () => document.getElementById("demo") && { on: document.getElementById("demo").checked }).then((d) => d.on));
+  await click(manager, "#demo");
+  await poll(manager, () => document.querySelector('[data-resolver]') && document.getElementById("demo").checked);
+
   // 1. A private field: refused at once.
   await click(page, "#ask-private");
   check("a private field is refused with the one page refusal", { status: "denied", reason: "denied" }, await status("denied"));
@@ -63,7 +73,6 @@ try {
   // 3. Ask for sizes and a budget; approve in the extension with smaller answers.
   await click(page, "#ask");
   await status("waiting");
-  const manager = await fox.openExtensionPage("manager.html");
   const cards = await poll(
     manager,
     () => {
@@ -133,7 +142,7 @@ try {
   record.trail = verified;
   record.trailKinds = await manager.evaluate(() => [...document.querySelectorAll("#trail tbody tr td:nth-child(3)")].map((td) => td.textContent).toReversed());
   // A read with an unknown grant id (step 6) is not logged, so a page cannot flood the trail with guesses.
-  const expectedKinds = ["refuse", "refuse", "request", "request", "deny", "grant", "read", "read", "revoke", "read.refused"];
+  const expectedKinds = ["refuse", "refuse", "refuse", "request", "request", "deny", "grant", "read", "read", "revoke", "read.refused"];
   check("the trail holds every step, oldest first", expectedKinds, record.trailKinds);
 } catch (error) {
   record.error = error instanceof Error ? error.message : String(error);
