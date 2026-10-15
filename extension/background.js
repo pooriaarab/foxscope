@@ -1,6 +1,7 @@
 // The foxscope event page. It holds the grants (storage.local) and the trail
-// (IndexedDB), asks foxprefs and foxpack for values, and shows a notice on
-// each read. Web pages reach it through content.js only.
+// (IndexedDB), asks foxprefs and foxpack for values, opens the approval
+// page, and shows a notice on each read. Web pages reach it through
+// content.js only; the extension pages reach it with "ui.*" messages.
 import { IdbStore, Log, idbKey } from "foxtrail";
 import { KNOWN_RESOLVERS, createScope, demoResolver, messageResolver, storageAreaStore } from "../src/index.ts";
 
@@ -39,15 +40,57 @@ async function scope() {
   return current.scope;
 }
 
+/** Tell the tab that waits for a request what the user decided. A closed tab is fine. */
+async function answerTab(requestId, response) {
+  const waiting = await get("fsc:waiting", {});
+  const tab = waiting[requestId];
+  delete waiting[requestId];
+  await store.set({ "fsc:waiting": waiting });
+  if (tab) await browser.tabs.sendMessage(tab.tabId, { type: "scent.decided", requestId, response }, { frameId: 0 }).catch(() => {});
+}
+
 // From content.js. The agent is the origin Firefox reports for the sender; the page cannot set it (E2).
 const pageHandlers = {
-  "page.request": async (msg, agent) => (await scope()).request({ agent, fields: msg.fields, purpose: msg.purpose, ...(msg.ttlSeconds === undefined ? {} : { ttlSeconds: msg.ttlSeconds }) }),
+  async "page.request"(msg, agent, sender) {
+    const s = await scope();
+    const response = await s.request({ agent, fields: msg.fields, purpose: msg.purpose, ...(msg.ttlSeconds === undefined ? {} : { ttlSeconds: msg.ttlSeconds }) });
+    if (response.status === "pending") {
+      const waiting = await get("fsc:waiting", {});
+      const fresh = !waiting[response.requestId];
+      waiting[response.requestId] = { tabId: sender.tab.id };
+      await store.set({ "fsc:waiting": waiting });
+      if (fresh) await browser.windows.create({ type: "popup", url: browser.runtime.getURL(`approve.html#${response.requestId}`), width: 480, height: 640 });
+    }
+    return response;
+  },
   "page.read": async (msg, agent) => (await scope()).read(msg.grantId, msg.fields, { agent }),
   "page.revoke": async (msg, agent) => {
     await (await scope()).revoke(msg.grantId, { agent });
     return true;
   },
 };
+
+// From the extension's own pages: the approval page.
+const uiHandlers = {
+  "ui.request": async ({ requestId }) => (await (await scope()).pending()).find((r) => r.id === requestId) ?? null,
+  async "ui.approve"({ requestId, digest, ttlSeconds, derive }) {
+    const s = await scope();
+    const grant = await s.approve(requestId, { digest, derive: derive === true, ...(ttlSeconds ? { ttlSeconds } : {}) });
+    const waiting = await get("fsc:waiting", {});
+    if (waiting[requestId]) {
+      const values = await s.read(grant.id, undefined, { agent: grant.agent });
+      await answerTab(requestId, { status: "granted", grantId: grant.id, expiresAt: grant.expiresAt, values });
+    }
+    return grant;
+  },
+  async "ui.deny"({ requestId }) {
+    await (await scope()).deny(requestId);
+    await answerTab(requestId, { status: "denied", reason: "the user denied the request" });
+    return true;
+  },
+};
+
+const ownPage = (sender) => typeof sender.url === "string" && sender.url.startsWith(browser.runtime.getURL(""));
 
 browser.runtime.onMessage.addListener((msg, sender) => {
   const type = msg?.type;
@@ -61,7 +104,9 @@ browser.runtime.onMessage.addListener((msg, sender) => {
       origin = "null";
     }
     if (!sender.tab || sender.frameId !== 0 || !/^https?:/.test(origin)) return undefined;
-    run = () => pageHandlers[type](msg, origin);
+    run = () => pageHandlers[type](msg, origin, sender);
+  } else if (ownPage(sender) && Object.hasOwn(uiHandlers, type)) {
+    run = () => uiHandlers[type](msg, sender);
   } else return undefined;
   return run().then(
     (value) => ({ ok: true, value }),
