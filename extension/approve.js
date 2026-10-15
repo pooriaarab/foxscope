@@ -3,6 +3,7 @@
 // invisible and direction characters are shown as codes, so a request
 // cannot hide what it asks for.
 import { PAGE_MAX_GRANT_SECONDS } from "../src/browser.ts";
+import { visible } from "../src/fields.ts";
 
 const requestId = location.hash.slice(1);
 const $ = (id) => document.getElementById(id);
@@ -13,8 +14,6 @@ async function send(type, data = {}) {
   return reply.value;
 }
 
-// oxlint-disable-next-line no-control-regex
-const visible = (text) => text.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁩﻿]/g, (c) => `\\u{${c.codePointAt(0).toString(16)}}`);
 const SENSITIVITY = { public: ["ok", "public"], ask: ["asks", "asks you"] };
 
 function duration(s) {
