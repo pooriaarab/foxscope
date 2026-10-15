@@ -2,6 +2,8 @@
 // (its origin, the purpose) goes in with textContent, never as HTML, and
 // invisible and direction characters are shown as codes, so a request
 // cannot hide what it asks for.
+import { PAGE_MAX_GRANT_SECONDS } from "../src/browser.ts";
+
 const requestId = location.hash.slice(1);
 const $ = (id) => document.getElementById(id);
 
@@ -49,9 +51,12 @@ function render(r) {
       return li;
     }),
   );
+  // A page gets at most PAGE_MAX_GRANT_SECONDS (G18), whatever it asks.
   const asked = r.ttlSeconds;
-  const options = [...new Set([asked, 300, 3600, 86400].filter(Boolean))].toSorted((a, b) => a - b);
-  $("ttl").replaceChildren(...options.map((s) => Object.assign(document.createElement("option"), { value: String(s), textContent: duration(s) + (s === asked ? " (asked)" : ""), selected: s === (asked ?? 3600) })));
+  const top = Math.min(asked ?? PAGE_MAX_GRANT_SECONDS, PAGE_MAX_GRANT_SECONDS);
+  const note = (s) => (s !== top ? "" : s === asked ? " (asked)" : asked ? ` (asked ${duration(asked)}; ${duration(PAGE_MAX_GRANT_SECONDS)} is the most)` : "");
+  const options = [...new Set([top, 300, 900, PAGE_MAX_GRANT_SECONDS])].filter((s) => s <= top).toSorted((a, b) => a - b);
+  $("ttl").replaceChildren(...options.map((s) => Object.assign(document.createElement("option"), { value: String(s), textContent: duration(s) + note(s), selected: s === top })));
   const derivable = r.fields.some((f) => f.derivable);
   $("smaller").hidden = !derivable;
   $("smaller-note").hidden = !derivable;

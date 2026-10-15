@@ -40,3 +40,6 @@ export const pageResponse = (r: ScentResponse): ScentResponse => (r.status === "
 
 /** Any thrown error as a page may see it. */
 export const pageError = (_error: unknown) => ({ ok: false as const, code: PAGE_REFUSAL, error: PAGE_REFUSAL });
+
+/** The longest grant a web page can get: 1 hour. The extension makes its scope with this cap. */
+export const PAGE_MAX_GRANT_SECONDS = 3600;

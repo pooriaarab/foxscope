@@ -1,6 +1,6 @@
-// G6, G7, G12, G13 and G15 in docs/failure-modes.md: the user's decision.
+// G6, G7, G12, G13, G15 and G18 in docs/failure-modes.md: the user's decision.
 import { describe, expect, it } from "vitest";
-import { ScopeError } from "../src/index.js";
+import { PAGE_MAX_GRANT_SECONDS, ScopeError } from "../src/index.js";
 import { SIZES, setup, shop } from "./helpers.js";
 
 const code = async (p: Promise<unknown>) => p.then(() => "no error", (e: unknown) => (e instanceof ScopeError ? e.code : String(e)));
@@ -83,5 +83,21 @@ describe("approve and deny", () => {
     if (answer.status !== "pending") throw new Error("expected pending");
     fields[0] = { ...fields[0]!, sensitivity: "private" as never };
     expect(await code(s.scope.approve(answer.requestId))).toBe("private-field");
+  });
+
+  it("G18: a scope with a grant cap gives no grant longer than the cap", async () => {
+    expect(PAGE_MAX_GRANT_SECONDS).toBe(3600);
+    const { scope, clock } = await setup({ maxGrantSeconds: PAGE_MAX_GRANT_SECONDS, grantPublic: true });
+    const month = await scope.request({ ...shop, ttlSeconds: 2_592_000 });
+    if (month.status !== "pending") throw new Error("expected pending");
+    expect(await code(scope.approve(month.requestId, { ttlSeconds: 86_400 }))).toBe("bad-ttl");
+    const grant = await scope.approve(month.requestId);
+    expect(Date.parse(grant.expiresAt) - clock.now()).toBe(3_600_000);
+    expect(await code(scope.addRule({ agent: shop.agent, fields: "demo.travel.*", maxTtlSeconds: 86_400 }))).toBe("bad-rule");
+    await scope.addRule({ agent: shop.agent, fields: "demo.travel.*", maxTtlSeconds: 3600 });
+    const byRule = await scope.request({ ...shop, fields: ["demo.travel.home"], purpose: "Trip", ttlSeconds: 2_592_000 });
+    expect(byRule.status === "granted" && Date.parse(byRule.expiresAt) - clock.now()).toBe(3_600_000);
+    const pub = await scope.request({ ...shop, fields: ["demo.profile.name"], purpose: "Hi", ttlSeconds: 2_592_000 });
+    expect(pub.status === "granted" && Date.parse(pub.expiresAt) - clock.now()).toBe(3_600_000);
   });
 });

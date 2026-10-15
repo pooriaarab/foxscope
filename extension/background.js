@@ -3,7 +3,7 @@
 // page, and shows a notice on each read. Web pages reach it through
 // content.js only; the extension pages reach it with "ui.*" messages.
 import { IdbStore, Log, idbKey } from "foxtrail";
-import { KNOWN_RESOLVERS, PAGE_REFUSAL, createScope, demoResolver, messageResolver, pageError, pageResponse, storageAreaStore } from "../src/index.ts";
+import { KNOWN_RESOLVERS, PAGE_MAX_GRANT_SECONDS, PAGE_REFUSAL, createScope, demoResolver, messageResolver, pageError, pageResponse, storageAreaStore } from "../src/index.ts";
 
 const store = browser.storage.local;
 const get = async (key, fallback) => (await store.get(key))[key] ?? fallback;
@@ -35,7 +35,8 @@ async function scope() {
   if (current?.demo !== demo) {
     const resolvers = KNOWN_RESOLVERS.map((r) => messageResolver({ namespace: r.namespace, extensionId: r.extensionId, send: (id, msg) => browser.runtime.sendMessage(id, msg) }));
     if (demo) resolvers.push(demoResolver());
-    current = { demo, scope: createScope({ resolvers, store: storageAreaStore(store), trail: await openTrail(), notify }) };
+    // Every agent here is a web page: no grant longer than 1 hour (G18), and no public field without the user (G17).
+    current = { demo, scope: createScope({ resolvers, store: storageAreaStore(store), trail: await openTrail(), notify, maxGrantSeconds: PAGE_MAX_GRANT_SECONDS }) };
   }
   return current.scope;
 }
