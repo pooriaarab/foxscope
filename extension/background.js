@@ -36,9 +36,16 @@ async function scope() {
     const resolvers = KNOWN_RESOLVERS.map((r) => messageResolver({ namespace: r.namespace, extensionId: r.extensionId, send: (id, msg) => browser.runtime.sendMessage(id, msg) }));
     if (demo) resolvers.push(demoResolver());
     // Every agent here is a web page: no grant longer than 1 hour (G18), and no public field without the user (G17).
-    current = { demo, scope: createScope({ resolvers, store: storageAreaStore(store), trail: await openTrail(), notify, maxGrantSeconds: PAGE_MAX_GRANT_SECONDS }) };
+    current = { demo, scope: createScope({ resolvers, store: storageAreaStore(store), trail: await openTrail(), notify, dropped, maxGrantSeconds: PAGE_MAX_GRANT_SECONDS }) };
   }
   return current.scope;
+}
+
+/** A request the full list dropped (I8): its tab gets the same "denied" as any refusal, and its approval window closes. */
+async function dropped(request) {
+  const tab = (await get("fsc:waiting", {}))[request.id];
+  await answerTab(request.id, { status: "denied", reason: PAGE_REFUSAL });
+  if (tab?.windowId !== undefined) await browser.windows.remove(tab.windowId).catch(() => {});
 }
 
 /** Tell the tab that waits for a request what the user decided. A closed tab is fine. */
@@ -57,10 +64,18 @@ const pageHandlers = {
     const response = await s.request({ agent, fields: msg.fields, purpose: msg.purpose, ...(msg.ttlSeconds === undefined ? {} : { ttlSeconds: msg.ttlSeconds }) });
     if (response.status === "pending") {
       const waiting = await get("fsc:waiting", {});
-      const fresh = !waiting[response.requestId];
-      waiting[response.requestId] = { tabId: sender.tab.id };
+      const known = waiting[response.requestId];
+      waiting[response.requestId] = { ...known, tabId: sender.tab.id };
       await store.set({ "fsc:waiting": waiting });
-      if (fresh) await browser.windows.create({ type: "popup", url: browser.runtime.getURL(`approve.html#${response.requestId}`), width: 480, height: 640 });
+      if (!known) {
+        // Keep the window id, so a dropped request can close its window.
+        const win = await browser.windows.create({ type: "popup", url: browser.runtime.getURL(`approve.html#${response.requestId}`), width: 480, height: 640 });
+        const now = await get("fsc:waiting", {});
+        if (now[response.requestId]) {
+          now[response.requestId].windowId = win.id;
+          await store.set({ "fsc:waiting": now });
+        }
+      }
     }
     return pageResponse(response);
   },

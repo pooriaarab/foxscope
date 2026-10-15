@@ -15,6 +15,8 @@ export interface ScopeOptions {
   rules?: RuleInput[];
   /** Runs before each read returns values. If it throws, the read fails with notice-failed. */
   notify?: (notice: ReadNotice) => void | Promise<void>;
+  /** Runs when a full list drops a waiting request (I8), after the drop, so the caller can tell whoever waits for it. */
+  dropped?: (request: PendingRequest) => void | Promise<void>;
   /** The clock in ms. Default: Date.now. */
   now?: () => number;
   /** How long a resolver may take. Default: 5000 ms. */
@@ -204,6 +206,7 @@ export function createScope(o: ScopeOptions) {
       if (early || typeof req === "string") return early!;
       const info = await resolvers.describe(req.fields);
       // The state may have changed while the resolvers answered, so decide on a fresh load.
+      let drop: PendingRequest | undefined;
       const decided = await change(async (state, now): Promise<ScentResponse | Grant> => {
         if (typeof info === "string") {
           await log(req.agent, "scent.refuse", { reason: info, fields: req.fields });
@@ -242,9 +245,9 @@ export function createScope(o: ScopeOptions) {
           return { status: "denied", reason: `too-many-pending: ${why} already wait for the user` };
         }
         if (waiting.length >= MAX_PENDING) {
-          const [oldest] = biggest;
-          await log(oldest!.agent, "scent.request.dropped", { requestId: oldest!.id, reason: "too-many-pending" });
-          state.requests = state.requests.filter((r) => r.id !== oldest!.id);
+          drop = biggest[0]!;
+          await log(drop.agent, "scent.request.dropped", { requestId: drop.id, reason: "too-many-pending" });
+          state.requests = state.requests.filter((r) => r.id !== drop!.id);
         }
         const pending: PendingRequest = { id: id("r"), agent: req.agent, fields: info, purpose: req.purpose, digest: await digestOf(req), createdAt: iso(now), expiresAt: iso(now + REQUEST_TTL_MS) };
         if (req.ttlSeconds !== undefined) pending.ttlSeconds = req.ttlSeconds;
@@ -252,6 +255,7 @@ export function createScope(o: ScopeOptions) {
         state.requests.push(pending);
         return { status: "pending", requestId: pending.id };
       });
+      if (drop) await o.dropped?.(drop);
       if ("status" in decided) return decided;
       return { status: "granted", grantId: decided.id, expiresAt: decided.expiresAt, values: await readGrant(decided.id, req.fields, req.agent) };
     },
