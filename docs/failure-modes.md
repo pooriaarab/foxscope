@@ -40,8 +40,8 @@ in doubt, refuse, and say why.
 
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
-| G1 | A read on an expired grant | `expired`, and no values | tests/read.test.ts, E2E |
-| G2 | A read on a revoked grant | `revoked`, and no values | tests/read.test.ts, E2E |
+| G1 | A read on an expired grant, also when it expires while the notice or the resolver runs | `expired`, and no values. The grant is checked again after the resolver answers, right before the values are returned | tests/read.test.ts, E2E |
+| G2 | A read on a revoked grant, also when the revoke comes while the notice or the resolver runs | `revoked`, and no values | tests/read.test.ts, E2E |
 | G3 | A read asks for a field that the grant does not hold | `field-not-granted` | tests/read.test.ts |
 | G4 | A read on an unknown grant id, or on a grant of another agent | `no-grant`. The two look the same, so an agent cannot probe other grants. No trail entry, so a page cannot flood the trail with guesses | tests/read.test.ts, tests/mcp.test.ts |
 | G5 | The clock goes back | foxscope keeps the latest time it saw, so an expired grant stays expired | tests/read.test.ts |
