@@ -5,14 +5,14 @@
     "en-US": "foxscope — context you grant"
   },
   "summary": {
-    "en-US": "Give AI agents only the context you grant: scoped, expiring grants with notice and a trail."
+    "en-US": "Let AI agents on web pages read only the context you allow: named fields, a purpose and a time limit. You see each read, revoke at any time, and keep a tamper-evident trail."
   },
   "description": {
-    "en-US": "Give AI agents only the context you grant: scoped, expiring grants with notice and a trail.\n\n**Who it is for:** people who want to see foxscope work in their own browser before they build on the foxscope library.\n\n**What leaves your computer:** nothing. foxscope has no server, sends no data off this device, and has no analytics.\n\n**Permissions**\n\n- Storage: keep a value in your browser that the toolbar popup shows.\n\nThe source code is MIT licensed."
+    "en-US": "foxscope lets a web page that runs an AI agent ask your browser for a few named facts, such as your top size or a budget, and get only what you allow. It is the browser side of SCENT (Scoped Context Exchange with Notice and Trail).\n\n**Who it is for:** people who use shopping, travel or writing agents on the web and want to decide what those agents know, and developers who build such agents.\n\n**What it does**\n\n- A page calls window.scent.request with the fields, the purpose and the time it wants.\n- An approval window shows the site, the purpose, each field and its sensitivity, and the time. You pick Approve, Approve smaller answers (a range or a yes/no in place of the exact value) or Deny.\n- Private fields are never given. Standing rules can answer one site for a set of fields, for a time you set.\n- Each read shows a notification. The manager page lists live grants with a countdown, waiting requests, rules, recent reads and the trail, which you can verify.\n- Revoke one grant, or everything of one site, at any time.\n\n**Where the values come from:** the foxprefs and foxpack add-ons, when you install them, and sample values that you can turn off in the manager page.\n\n**What leaves the browser, and when**\n\n- foxscope has no server and sends nothing to its authors.\n- A value goes to a web page only after you approve that page's request, or after you add a standing rule for it. The page gets the approved fields and nothing else.\n\n**Permissions**\n\n- Storage: grants, rules and the list of recent reads stay in your browser. The trail is kept in the add-on's IndexedDB.\n- Notifications: a notice on each read.\n- Access to https pages: to give pages the window.scent function. It reads nothing from the page.\n\nThe source code is MIT licensed."
   },
   "categories": {
     "firefox": [
-      "other"
+      "privacy-security"
     ]
   },
   "homepage": {
@@ -23,6 +23,6 @@
   },
   "version": {
     "license": "MIT",
-    "approval_notes": "The uploaded source.zip is the git tree of this release. To build: install Node 24 and pnpm (corepack enable), run `pnpm install --frozen-lockfile`, then `pnpm build:ext`. The output is dist-ext/. esbuild bundles extension/*.js; the other files are copied unmodified. To try it: click the toolbar button. The popup shows the value that the background script stores at install. No account is needed."
+    "approval_notes": "The uploaded source.zip is the git tree of this release. To build: install Node 24 and pnpm 11 (corepack enable), run `pnpm install --frozen-lockfile`, then `pnpm build:ext`. The output is dist-ext/. esbuild bundles extension/*.js with src/ and the foxtrail package; the other files are copied unmodified. To try it: open the add-on preferences (the manager page). On any https page, run in the web console: `await window.scent.request({fields: [\"demo.shopping.size.top\"], purpose: \"Pick a size\"})`. An approval window opens; press Approve and the console prints the value. Fields named demo.* are built-in sample values. No account is needed."
   }
 }
