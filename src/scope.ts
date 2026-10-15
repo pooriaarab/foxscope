@@ -146,7 +146,7 @@ export function createScope(o: ScopeOptions) {
     return { grant: structuredClone(grant), names };
   }
 
-  /** Check, log, notify, then resolve: the trail and the notice come before any value. */
+  /** Check, log, notify, resolve, then check again: the trail and the notice come before any value, and a revoke holds until the values are returned. */
   async function readGrant(grantId: string, fields: string[] | undefined, agent: string | undefined): Promise<Record<string, unknown>> {
     const { names } = await change((state, now) => checkGrant(state, now, grantId, fields, agent));
     const info = await resolvers.describe(names);
@@ -165,11 +165,15 @@ export function createScope(o: ScopeOptions) {
     } catch (error) {
       return refuse("notice-failed", `the notice failed, so foxscope gives no values: ${error instanceof Error ? error.message : String(error)}`);
     }
+    let values: Record<string, unknown>;
     try {
-      return await resolvers.resolve(names, grant.derive);
+      values = await resolvers.resolve(names, grant.derive);
     } catch (error) {
       return refuse("resolver-failed", error instanceof Error ? error.message : String(error));
     }
+    // And once more, last: a revoke or the expiry may have come during the notice or the resolver.
+    await change((state, now) => checkGrant(state, now, grantId, names, agent));
+    return values;
   }
 
   async function makeGrant(state: ScopeState, now: number, g: Omit<Grant, "id" | "createdAt">, actor: string): Promise<Grant> {
