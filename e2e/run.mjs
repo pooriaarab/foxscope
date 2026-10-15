@@ -4,6 +4,7 @@
 //
 //   1. The page asks for a private field: refused at once with "denied", nothing waits (P1, E4, E9).
 //   2. A hostile call with a getter, a proxy or a made-up agent gets nothing (E1, E2).
+//      Its public field waits for the user like any other (G17); the user denies it.
 //   3. The page asks for two sizes and a budget. The request shows in the
 //      manager page; the test approves it with smaller answers on the approval page.
 //   4. The page gets exactly those three values, the budget as a band (P7).
@@ -50,27 +51,40 @@ try {
     return {
       getter: await settle(window.scent.request({ get fields() { return ["demo.profile.name"]; }, purpose: "x" })),
       proxy: await settle(window.scent.request(new Proxy({ fields: ["demo.profile.name"], purpose: "x" }, {}))),
-      spoof: await settle(window.scent.request({ agent: "https://bank.example", fields: ["demo.profile.name"], purpose: "Say hello" })),
+      // A public field still waits for the user, so this settles after the deny below.
+      spoof: void (window.spoofed = settle(window.scent.request({ agent: "https://bank.example", fields: ["demo.profile.name"], purpose: "Say hello" }))),
       replaced: (() => { window.scent = { request: () => "fake" }; return typeof window.scent.request === "function" && window.scent.request.toString().includes("native"); })(),
     };
   });
   check("a getter on the request gives nothing", { status: "denied", reason: "denied" }, hostile.getter.value);
   check("a proxy request is rejected", "foxscope: purpose must be a string", hostile.proxy.error);
-  check("a public field is granted without asking", { "demo.profile.name": "Sam Fox" }, hostile.spoof.value?.values);
   check("the page cannot replace window.scent", true, hostile.replaced);
 
   // 3. Ask for sizes and a budget; approve in the extension with smaller answers.
   await click(page, "#ask");
   await status("waiting");
   const manager = await fox.openExtensionPage("manager.html");
-  const requestId = await poll(manager, () => document.querySelector("[data-request]")?.dataset.request, undefined, 30_000);
-  const managerShows = await manager.evaluate((id) => {
-    const card = document.querySelector(`[data-request="${id}"]`);
-    return { agent: card.querySelector(".site").textContent, fields: [...card.querySelectorAll(".chip")].map((c) => c.textContent) };
-  }, requestId);
-  check("the manager shows the request from the page origin only", { agent: origin, fields: ["demo.shopping.size.top", "demo.shopping.size.shoe", "demo.shopping.budget"] }, managerShows);
-  check("a made-up agent is ignored: each grant is for the page origin", [origin], await manager.evaluate(() => [...new Set([...document.querySelectorAll("[data-grant] .site")].map((s) => s.textContent))]));
-  check("only one request waits (the private one never did)", 1, await manager.evaluate(() => document.querySelectorAll("[data-request]").length));
+  const cards = await poll(
+    manager,
+    () => {
+      const all = [...document.querySelectorAll("[data-request]")];
+      return all.length === 2 && all.map((card) => ({ id: card.dataset.request, agent: card.querySelector(".site").textContent, fields: [...card.querySelectorAll(".chip")].map((c) => c.textContent) }));
+    },
+    undefined,
+    30_000,
+  );
+  const spoofCard = cards.find((c) => c.fields.includes("demo.profile.name"));
+  const sizesCard = cards.find((c) => c.fields.includes("demo.shopping.size.top"));
+  check("two requests wait: the public field and the sizes (the private one never did)", 2, cards.length);
+  check("a public field waits for the user, under the page origin, not the made-up agent", { agent: origin, fields: ["demo.profile.name"] }, spoofCard && { agent: spoofCard.agent, fields: spoofCard.fields });
+  check("the manager shows the request from the page origin only", { agent: origin, fields: ["demo.shopping.size.top", "demo.shopping.size.shoe", "demo.shopping.budget"] }, sizesCard && { agent: sizesCard.agent, fields: sizesCard.fields });
+  check("no page got a grant without the user", 0, await manager.evaluate(() => document.querySelectorAll("[data-grant]").length));
+  const denyPage = await fox.openExtensionPage(`approve.html#${spoofCard.id}`);
+  await poll(denyPage, () => !document.getElementById("request").hidden);
+  await click(denyPage, "#deny");
+  await poll(denyPage, () => document.getElementById("decision").textContent === "Denied.");
+  check("the page learns only that it was denied", { status: "denied", reason: "denied" }, (await page.evaluate(() => window.spoofed)).value);
+  const requestId = sizesCard.id;
   const approve = await fox.openExtensionPage(`approve.html#${requestId}`);
   const shown = await poll(approve, () => !document.getElementById("request").hidden && { agent: document.getElementById("agent").textContent, purpose: document.getElementById("purpose").textContent, labels: [...document.querySelectorAll("#fields .label")].map((l) => l.textContent), smaller: !document.getElementById("smaller").hidden });
   check("the approval page shows origin, purpose and each field", { agent: origin, purpose: "Find clothes that fit you, inside your budget", labels: ["Top size", "Shoe size", "Monthly clothes budget"], smaller: true }, shown);
@@ -89,10 +103,10 @@ try {
   const grantId = await page.evaluate(() => grantId);
 
   // 5. Notices.
-  const reads = await poll(manager, (n) => document.querySelectorAll("#notices li:not(.empty)").length >= n && [...document.querySelectorAll("#notices li")].map((li) => li.textContent), 3);
-  check("the manager lists each read (public, approval, read again)", [true, true, true], reads.slice(0, 3).map((t) => t.includes(origin)));
+  const reads = await poll(manager, (n) => document.querySelectorAll("#notices li:not(.empty)").length >= n && [...document.querySelectorAll("#notices li")].map((li) => li.textContent), 2);
+  check("the manager lists each read (approval, read again)", [true, true], reads.slice(0, 2).map((t) => t.includes(origin)));
   const shownNotices = await manager.evaluate(async () => Object.keys(await browser.notifications.getAll()).filter((k) => k.startsWith("fsc-read:")).length).catch((e) => `error: ${e.message}`);
-  if (shownNotices === 3 || !remote) check("Firefox shows a notification for each read", 3, shownNotices);
+  if (shownNotices === 2 || !remote) check("Firefox shows a notification for each read", 2, shownNotices);
   else record.skipped.push({ name: "Firefox shows a notification for each read", actual: shownNotices, reason: "Ichabod: notifications.getAll through the frame relay" });
 
   // 6. Another origin cannot read this grant.
@@ -119,7 +133,7 @@ try {
   record.trail = verified;
   record.trailKinds = await manager.evaluate(() => [...document.querySelectorAll("#trail tbody tr td:nth-child(3)")].map((td) => td.textContent).toReversed());
   // A read with an unknown grant id (step 6) is not logged, so a page cannot flood the trail with guesses.
-  const expectedKinds = ["refuse", "refuse", "grant", "read", "request", "grant", "read", "read", "revoke", "read.refused"];
+  const expectedKinds = ["refuse", "refuse", "request", "request", "deny", "grant", "read", "read", "revoke", "read.refused"];
   check("the trail holds every step, oldest first", expectedKinds, record.trailKinds);
 } catch (error) {
   record.error = error instanceof Error ? error.message : String(error);

@@ -85,6 +85,8 @@ export async function startMcp(o: { demo: boolean; env: Record<string, string | 
   const scope = await openScope({
     home: o.env.FOXSCOPE_HOME || undefined,
     resolvers,
+    // An MCP client is a local agent the user starts, so public fields need no approval.
+    grantPublic: true,
     notify: (n) => void process.stderr.write(`foxscope notice: ${n.agent} read ${n.fields.join(", ")} (grant ${n.grantId})\n`),
   });
   const server = createMcpServer({ scope, version, approveCommand: o.demo ? "foxscope --demo approve" : "foxscope approve" });

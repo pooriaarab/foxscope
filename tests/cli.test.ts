@@ -74,6 +74,12 @@ describe("foxscope CLI", () => {
     expect(denied).toMatchObject({ code: 1, err: "foxscope: denied: private-field: demo.health.allergies\n" });
   });
 
+  it("G17: the CLI, a local agent, gets public fields without asking", async () => {
+    const run = cli();
+    const granted = await run("--demo", "request", "a", "demo.profile.name", "--purpose", "Say hello");
+    expect(granted.out).toMatch(/^granted g-/);
+  });
+
   it("R5: lists the fields and says which resolvers are missing", async () => {
     const run = cli();
     const plain = await run("fields");

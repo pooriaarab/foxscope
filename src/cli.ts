@@ -90,7 +90,8 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     const ttl = seconds(v.ttl);
     const { resolvers, status } = await loadResolvers({ demo: v.demo, importModule: io.importModule });
     const notify = (n: ReadNotice) => io.stderr(`notice: ${n.agent} read ${n.fields.join(", ")} (grant ${n.grantId})\n`);
-    const scope = await openScope({ home: io.env.FOXSCOPE_HOME || undefined, resolvers, notify });
+    // The CLI is a local agent the user runs, so public fields need no approval.
+    const scope = await openScope({ home: io.env.FOXSCOPE_HOME || undefined, resolvers, notify, grantPublic: true });
 
     switch (command) {
       case "rules": {

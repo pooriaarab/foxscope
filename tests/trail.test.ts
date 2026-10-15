@@ -22,7 +22,7 @@ describe("trail", () => {
   });
 
   it("T4: each grant entry says which agent got it, and why", async () => {
-    const { scope, entries } = await setup({ rules: [{ agent: shop.agent, fields: "demo.shopping.**", maxTtlSeconds: 600 }] });
+    const { scope, entries } = await setup({ grantPublic: true, rules: [{ agent: shop.agent, fields: "demo.shopping.**", maxTtlSeconds: 600 }] });
     await scope.request(shop);
     await scope.request({ ...shop, agent: "mcp-agent", fields: ["demo.profile.name"], purpose: "Say hello" });
     const asked = await scope.request({ ...shop, fields: ["demo.travel.home"], purpose: "Plan a trip" });
