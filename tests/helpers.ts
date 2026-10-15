@@ -4,7 +4,7 @@ import { createScope, demoResolver, memoryStore, type ReadNotice, type RuleInput
 
 export const T0 = Date.parse("2026-10-15T12:00:00Z");
 
-export async function setup(o: { resolvers?: ScentResolver[]; rules?: RuleInput[]; notify?: (n: ReadNotice) => void | Promise<void>; trailStore?: Store; resolverTimeoutMs?: number; grantPublic?: boolean } = {}) {
+export async function setup(o: { resolvers?: ScentResolver[]; rules?: RuleInput[]; notify?: (n: ReadNotice) => void | Promise<void>; trailStore?: Store; resolverTimeoutMs?: number; grantPublic?: boolean; maxGrantSeconds?: number } = {}) {
   let t = T0;
   const clock = { now: () => t, advance: (seconds: number) => void (t += seconds * 1000), set: (ms: number) => void (t = ms) };
   const trailStore = o.trailStore ?? new MemoryStore();
@@ -20,6 +20,7 @@ export async function setup(o: { resolvers?: ScentResolver[]; rules?: RuleInput[
     now: clock.now,
     resolverTimeoutMs: o.resolverTimeoutMs,
     grantPublic: o.grantPublic,
+    maxGrantSeconds: o.maxGrantSeconds,
   });
   const entries = () => trail.entries();
   const kinds = async () => (await entries()).map((e) => e.kind);

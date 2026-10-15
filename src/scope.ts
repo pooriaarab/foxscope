@@ -25,6 +25,8 @@ export interface ScopeOptions {
    * that the user starts; the extension leaves it off for web pages.
    */
   grantPublic?: boolean;
+  /** The longest grant, in seconds: a longer ask is cut to it, a longer approval or rule is refused. Default: 30 days. */
+  maxGrantSeconds?: number;
 }
 
 export const DEFAULT_TTL_SECONDS = 3600;
@@ -54,7 +56,14 @@ const live = (g: Grant, now: number) => !g.revokedAt && Date.parse(g.expiresAt) 
 
 export function createScope(o: ScopeOptions) {
   const resolvers = resolverSet(o.resolvers, o.resolverTimeoutMs);
-  const configRules: Rule[] = (o.rules ?? []).map((input, i) => ({ ...parseRule(input), id: `config-${i + 1}`, source: "config", createdAt: iso(0) }));
+  const maxGrant = o.maxGrantSeconds ?? MAX_TTL_SECONDS;
+  if (!Number.isInteger(maxGrant) || maxGrant <= 0 || maxGrant > MAX_TTL_SECONDS) throw new ScopeError("bad-ttl", `maxGrantSeconds must be a whole number from 1 to ${MAX_TTL_SECONDS}`);
+  const checkRule = (input: RuleInput) => {
+    const rule = parseRule(input);
+    if (rule.maxTtlSeconds > maxGrant) throw new ScopeError("bad-rule", `maxTtlSeconds must be at most ${maxGrant} here`);
+    return rule;
+  };
+  const configRules: Rule[] = (o.rules ?? []).map((input, i) => ({ ...checkRule(input), id: `config-${i + 1}`, source: "config", createdAt: iso(0) }));
   const clock = o.now ?? Date.now;
   const trail = o.trail;
   const recent = new Map<string, number[]>();
@@ -194,7 +203,7 @@ export function createScope(o: ScopeOptions) {
         });
         if (covered) {
           const caps = [...covering].map((r) => r.maxTtlSeconds);
-          const ttl = Math.min(req.ttlSeconds ?? (caps.length ? Infinity : DEFAULT_TTL_SECONDS), ...caps);
+          const ttl = Math.min(req.ttlSeconds ?? (caps.length ? Infinity : DEFAULT_TTL_SECONDS), ...caps, maxGrant);
           const via = covering.size ? "rule" : "public";
           return makeGrant(state, now, { agent: req.agent, fields: req.fields, purpose: req.purpose, derive: [...covering].some((r) => r.derive), via, ruleIds: [...covering].map((r) => r.id), expiresAt: iso(now + ttl * 1000) }, via);
         }
@@ -223,8 +232,8 @@ export function createScope(o: ScopeOptions) {
         if (!req) throw new ScopeError("not-found", `no waiting request ${requestId}`);
         if (Date.parse(req.expiresAt) <= now) throw new ScopeError("expired", `request ${requestId} expired at ${req.expiresAt}`);
         if (opts.digest !== undefined && opts.digest !== req.digest) throw new ScopeError("request-changed", `request ${requestId} is not the request that was shown`);
-        const ttl = opts.ttlSeconds ?? req.ttlSeconds ?? DEFAULT_TTL_SECONDS;
-        if (!Number.isInteger(ttl) || ttl <= 0 || ttl > MAX_TTL_SECONDS) throw new ScopeError("bad-ttl", `ttlSeconds must be a whole number from 1 to ${MAX_TTL_SECONDS}`);
+        const ttl = opts.ttlSeconds ?? Math.min(req.ttlSeconds ?? DEFAULT_TTL_SECONDS, maxGrant);
+        if (!Number.isInteger(ttl) || ttl <= 0 || ttl > maxGrant) throw new ScopeError("bad-ttl", `ttlSeconds must be a whole number from 1 to ${maxGrant}`);
         return { req, ttl, fields: req.fields.map((f) => f.name) };
       };
       const { fields } = await view(check);
@@ -278,7 +287,7 @@ export function createScope(o: ScopeOptions) {
 
     addRule: (input: RuleInput): Promise<Rule> =>
       change(async (state, now) => {
-        const rule: Rule = { ...parseRule(input), id: id("rule"), source: "user", createdAt: iso(now) };
+        const rule: Rule = { ...checkRule(input), id: id("rule"), source: "user", createdAt: iso(now) };
         await log("user", "scent.rule.add", { ruleId: rule.id, agent: rule.agent, fields: rule.fields, maxTtlSeconds: rule.maxTtlSeconds, derive: rule.derive });
         state.rules.push(rule);
         return rule;
