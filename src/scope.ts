@@ -226,12 +226,21 @@ export function createScope(o: ScopeOptions) {
         const waiting = state.requests.filter((r) => Date.parse(r.expiresAt) > now);
         const same = waiting.find((r) => r.agent === req.agent && r.purpose === req.purpose && r.ttlSeconds === req.ttlSeconds && sameSet(r.fields.map((f) => f.name), req.fields));
         if (same) return { status: "pending", requestId: same.id };
-        const site = siteOf(req.agent);
-        const fromSite = waiting.filter((r) => siteOf(r.agent) === site).length;
-        if (fromSite >= MAX_PENDING_PER_SITE || waiting.length >= MAX_PENDING) {
+        const bySite = new Map<string, PendingRequest[]>();
+        for (const r of waiting) bySite.set(siteOf(r.agent), [...(bySite.get(siteOf(r.agent)) ?? []), r]);
+        const fromSite = bySite.get(siteOf(req.agent))?.length ?? 0;
+        // A full list drops the oldest request of the site with the most, so
+        // many sites cannot shut out one that has fewer waiting (I8, I9).
+        const biggest = [...bySite.values()].reduce<PendingRequest[]>((a, b) => (b.length > a.length ? b : a), []);
+        if (fromSite >= MAX_PENDING_PER_SITE || (waiting.length >= MAX_PENDING && biggest.length <= fromSite)) {
           await log(req.agent, "scent.refuse", { reason: "too-many-pending", fields: req.fields });
           const why = fromSite >= MAX_PENDING_PER_SITE ? `${MAX_PENDING_PER_SITE} requests from this site` : `${MAX_PENDING} requests`;
           return { status: "denied", reason: `too-many-pending: ${why} already wait for the user` };
+        }
+        if (waiting.length >= MAX_PENDING) {
+          const [oldest] = biggest;
+          await log(oldest!.agent, "scent.request.dropped", { requestId: oldest!.id, reason: "too-many-pending" });
+          state.requests = state.requests.filter((r) => r.id !== oldest!.id);
         }
         const pending: PendingRequest = { id: id("r"), agent: req.agent, fields: info, purpose: req.purpose, digest: await digestOf(req), createdAt: iso(now), expiresAt: iso(now + REQUEST_TTL_MS) };
         if (req.ttlSeconds !== undefined) pending.ttlSeconds = req.ttlSeconds;

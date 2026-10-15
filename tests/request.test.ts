@@ -94,10 +94,29 @@ describe("request", () => {
     expect((await kinds()).filter((k) => k === "scent.refuse")).toHaveLength(1);
   });
 
-  it("I8: refuses a 51st waiting request", async () => {
-    const { scope } = await setup();
+  it("I8: keeps 50 waiting requests; a site with fewer than the biggest site drops that site's oldest", async () => {
+    const { scope, entries } = await setup();
     for (let i = 0; i < 50; i++) expect((await scope.request({ ...shop, agent: `agent-${i}` })).status).toBe("pending");
-    expect(await scope.request({ ...shop, agent: "agent-50" })).toEqual(denied("too-many-pending"));
+    expect(await scope.request({ ...shop, agent: "agent-0", purpose: "again" })).toEqual(denied("too-many-pending"));
+    const first = (await scope.pending())[0]!;
+    expect(await scope.request({ ...shop, agent: "agent-50" })).toMatchObject({ status: "pending" });
+    const waiting = await scope.pending();
+    expect(waiting).toHaveLength(50);
+    expect(waiting.map((r) => r.id)).not.toContain(first.id);
+    expect((await entries()).at(-2)).toMatchObject({ actor: "agent-0", kind: "scent.request.dropped", data: { requestId: first.id, reason: "too-many-pending" } });
+  });
+
+  it("I9: 17 sites under co.de cannot fill the waiting list against a site that has nothing waiting", async () => {
+    const { scope } = await setup();
+    for (let site = 0; site < 17; site++) {
+      for (let i = 0; i < 3; i++) expect((await scope.request({ ...shop, agent: `https://${site}.co.de`, purpose: `p${i}` })).status).toBe("pending");
+    }
+    expect(await scope.request(shop)).toMatchObject({ status: "pending" });
+    const waiting = await scope.pending();
+    expect(waiting).toHaveLength(50);
+    expect(waiting.filter((r) => r.agent === shop.agent)).toHaveLength(1);
+    const perSite = waiting.map((r) => waiting.filter((x) => x.agent === r.agent).length);
+    expect(Math.max(...perSite)).toBe(3);
   });
 
   it("P1: refuses a private field, also when a rule matches it", async () => {
