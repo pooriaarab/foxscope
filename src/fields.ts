@@ -20,6 +20,34 @@ export function isFieldName(name: unknown): name is string {
 
 export const namespaceOf = (name: string) => name.slice(0, name.indexOf("."));
 
+// Second-level labels under a two-letter country code that are public
+// suffixes in many countries: co.uk, com.au, ne.jp, ac.nz ...
+const SECOND_LEVEL = new Set(["ac", "co", "com", "edu", "go", "gov", "ne", "net", "or", "org"]);
+
+/**
+ * The site an agent counts against for the rate limit and the waiting list.
+ * Extensions have no Public Suffix List, so for a page origin this is a
+ * conservative guess at the registrable domain: the last two labels of the
+ * host, or three under a common second level such as co.uk. It groups too
+ * much rather than too little: every user.github.io page is one site. An IP
+ * address or a one-label host is its own site. Any other agent, such as an
+ * MCP client name, is its own site.
+ */
+export function siteOf(agent: string): string {
+  let url: URL;
+  try {
+    url = new URL(agent);
+  } catch {
+    return agent;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return agent;
+  const host = url.hostname;
+  if (host.startsWith("[") || /^[\d.]+$/.test(host) || !host.includes(".")) return host;
+  const labels = host.split(".");
+  const keep = labels.length >= 3 && labels.at(-1)!.length === 2 && SECOND_LEVEL.has(labels.at(-2)!) ? 3 : 2;
+  return labels.slice(-keep).join(".");
+}
+
 function checkAgent(agent: unknown): string | null {
   if (typeof agent !== "string" || !agent.trim()) return "agent must be a non-empty string";
   if (agent.length > MAX_AGENT) return `agent must be at most ${MAX_AGENT} characters`;

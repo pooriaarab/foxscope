@@ -1,7 +1,7 @@
 // The SCENT reference implementation: scope, consent, exchange, notice, trail.
 import { canonicalize, type Log, type VerifyResult } from "foxtrail";
 import { ScopeError } from "./errors.js";
-import { MAX_TTL_SECONDS, matchGlob, parseRequest, parseRule } from "./fields.js";
+import { MAX_TTL_SECONDS, matchGlob, parseRequest, parseRule, siteOf } from "./fields.js";
 import { resolverSet } from "./resolvers.js";
 import { parseState } from "./state.js";
 import type { Grant, PendingRequest, ReadNotice, Rule, RuleInput, ScentField, ScentRequest, ScentResolver, ScentResponse, ScopeState, ScopeStore } from "./types.js";
@@ -32,6 +32,7 @@ export interface ScopeOptions {
 export const DEFAULT_TTL_SECONDS = 3600;
 export const REQUEST_TTL_MS = 10 * 60_000;
 export const MAX_PENDING = 50;
+export const MAX_PENDING_PER_SITE = 3;
 export const RATE_LIMIT_PER_MINUTE = 30;
 const KEEP_ENDED_MS = 7 * 24 * 3600_000;
 
@@ -49,7 +50,30 @@ async function digestOf(r: ScentRequest): Promise<string> {
 function prune(state: ScopeState, now: number) {
   // Expired requests stay a day, so approve can say "expired" and not "not-found".
   state.requests = state.requests.filter((r) => Date.parse(r.expiresAt) > now - 24 * 3600_000);
+  for (const [site, entry] of Object.entries(state.rate)) {
+    entry.times = entry.times.filter((t) => t > now - 60_000);
+    if (!entry.times.length && !(entry.refusedAt! > now - 60_000)) delete state.rate[site];
+  }
   state.grants = state.grants.filter((g) => Math.min(Date.parse(g.expiresAt), g.revokedAt ? Date.parse(g.revokedAt) : Infinity) > now - KEEP_ENDED_MS);
+}
+
+/**
+ * Counts one request against the agent's site, in the stored state (I9). A
+ * site keeps at most 30 times, and "first" comes once a minute at most, so
+ * a flood neither grows the state nor fills the trail.
+ */
+function overLimit(state: ScopeState, agent: string, now: number): "ok" | "first" | "again" {
+  const site = siteOf(agent);
+  const entry = state.rate[site] ?? { times: [] };
+  entry.times = entry.times.filter((t) => t > now - 60_000);
+  state.rate[site] = entry;
+  if (entry.times.length < RATE_LIMIT_PER_MINUTE) {
+    entry.times.push(now);
+    return "ok";
+  }
+  if (entry.refusedAt !== undefined && entry.refusedAt > now - 60_000) return "again";
+  entry.refusedAt = now;
+  return "first";
 }
 
 const live = (g: Grant, now: number) => !g.revokedAt && Date.parse(g.expiresAt) > now;
@@ -66,7 +90,6 @@ export function createScope(o: ScopeOptions) {
   const configRules: Rule[] = (o.rules ?? []).map((input, i) => ({ ...checkRule(input), id: `config-${i + 1}`, source: "config", createdAt: iso(0) }));
   const clock = o.now ?? Date.now;
   const trail = o.trail;
-  const recent = new Map<string, number[]>();
 
   // One change at a time in this process; the store's lock orders processes.
   // fn reads and changes the state and writes the trail, nothing slower: a
@@ -101,14 +124,6 @@ export function createScope(o: ScopeOptions) {
 
   // JSON drops undefined; foxtrail refuses it.
   const log = (actor: string, kind: string, data: Record<string, unknown>) => trail.append({ actor, kind, data: JSON.parse(JSON.stringify(data)) });
-
-  function overLimit(agent: string, now: number): "ok" | "first" | "again" {
-    const times = (recent.get(agent) ?? []).filter((t) => t > now - 60_000);
-    times.push(now);
-    recent.set(agent, times);
-    if (times.length <= RATE_LIMIT_PER_MINUTE) return "ok";
-    return times.length === RATE_LIMIT_PER_MINUTE + 1 ? "first" : "again";
-  }
 
   /** The grant an agent may read now, and the names to read. Logs and throws a refusal. */
   async function checkGrant(state: ScopeState, now: number, grantId: string, fields: string[] | undefined, agent: string | undefined, info?: ScentField[] | string) {
@@ -170,11 +185,11 @@ export function createScope(o: ScopeOptions) {
       const given = (input as Partial<ScentRequest> | null)?.agent;
       const agent = typeof given === "string" && given.trim() ? given.slice(0, 200) : "unknown";
       const req = parseRequest(input);
-      const early = await change(async (_state, now): Promise<ScentResponse | null> => {
-        const limit = overLimit(agent, now);
+      const early = await change(async (state, now): Promise<ScentResponse | null> => {
+        const limit = overLimit(state, agent, now);
         if (limit !== "ok") {
           if (limit === "first") await log(agent, "scent.refuse", { reason: "rate-limited" });
-          return { status: "denied", reason: "rate-limited: more than 30 requests in one minute" };
+          return { status: "denied", reason: "rate-limited: more than 30 requests from this site in one minute" };
         }
         if (typeof req === "string") {
           await log(agent, "scent.refuse", { reason: "bad-request" });
@@ -211,9 +226,12 @@ export function createScope(o: ScopeOptions) {
         const waiting = state.requests.filter((r) => Date.parse(r.expiresAt) > now);
         const same = waiting.find((r) => r.agent === req.agent && r.purpose === req.purpose && r.ttlSeconds === req.ttlSeconds && sameSet(r.fields.map((f) => f.name), req.fields));
         if (same) return { status: "pending", requestId: same.id };
-        if (waiting.length >= MAX_PENDING) {
+        const site = siteOf(req.agent);
+        const fromSite = waiting.filter((r) => siteOf(r.agent) === site).length;
+        if (fromSite >= MAX_PENDING_PER_SITE || waiting.length >= MAX_PENDING) {
           await log(req.agent, "scent.refuse", { reason: "too-many-pending", fields: req.fields });
-          return { status: "denied", reason: `too-many-pending: ${MAX_PENDING} requests already wait for the user` };
+          const why = fromSite >= MAX_PENDING_PER_SITE ? `${MAX_PENDING_PER_SITE} requests from this site` : `${MAX_PENDING} requests`;
+          return { status: "denied", reason: `too-many-pending: ${why} already wait for the user` };
         }
         const pending: PendingRequest = { id: id("r"), agent: req.agent, fields: info, purpose: req.purpose, digest: await digestOf(req), createdAt: iso(now), expiresAt: iso(now + REQUEST_TTL_MS) };
         if (req.ttlSeconds !== undefined) pending.ttlSeconds = req.ttlSeconds;

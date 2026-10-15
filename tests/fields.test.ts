@@ -1,7 +1,7 @@
-// I1-I4, G11, P4 and R4 in docs/failure-modes.md: the checks on what an
+// I1-I4, I9, G11, P4 and R4 in docs/failure-modes.md: the checks on what an
 // agent sends, on rule globs, and on the field list a resolver returns.
 import { describe, expect, it } from "vitest";
-import { isFieldGlob, matchGlob, parseRequest } from "../src/index.js";
+import { isFieldGlob, matchGlob, parseRequest, siteOf } from "../src/index.js";
 import { parseFieldList } from "../src/fields.js";
 
 const ok = { agent: "https://shop.example", fields: ["demo.shopping.size.top"], purpose: "Pick a size" };
@@ -69,5 +69,25 @@ describe("parseFieldList", () => {
   it("P4: drops fields outside the resolver's namespace", () => {
     const list = [{ name: "x.a", label: "A", sensitivity: "ask", derivable: true }, { name: "demo.health.allergies", label: "Allergies", sensitivity: "public" }];
     expect(parseFieldList("x", list)).toEqual([{ name: "x.a", label: "A", sensitivity: "ask", derivable: true }]);
+  });
+});
+
+describe("siteOf", () => {
+  it("I9: groups a page origin by its registrable domain, and keeps other agents as they are", () => {
+    const cases: [string, string][] = [
+      ["https://shop.example", "shop.example"],
+      ["https://a.b.evil.example", "evil.example"],
+      ["http://evil.example:8080", "evil.example"],
+      ["https://x.shop.co.uk", "shop.co.uk"],
+      ["https://evil.co.uk", "evil.co.uk"],
+      ["https://a.b.example.com.au", "example.com.au"],
+      ["https://user.github.io", "github.io"],
+      ["http://127.0.0.1:5173", "127.0.0.1"],
+      ["http://localhost:3000", "localhost"],
+      ["http://[::1]:8080", "[::1]"],
+      ["claude-code", "claude-code"],
+      ["unknown", "unknown"],
+    ];
+    expect(cases.map(([agent]) => siteOf(agent))).toEqual(cases.map(([, site]) => site));
   });
 });
