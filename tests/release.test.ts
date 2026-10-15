@@ -1,4 +1,4 @@
-// X1 and X2 in docs/failure-modes.md: the release workflow. It is checked
+// X1-X3 in docs/failure-modes.md: the release workflow. It is checked
 // as text, job by job, because a release cannot run in a test.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -31,5 +31,16 @@ describe("release.yml", () => {
     expect(jobWith(/id-token: write/)).toEqual(jobWith(/npm publish/));
     expect(jobWith(/contents: write/)).toEqual(jobWith(/gh release create/));
     for (const block of Object.values(jobs)) expect(block).toMatch(/\n {4}permissions:\n/);
+  });
+
+  it("X3: npm publishes the build the check job made, and nothing downloaded runs unchecked", () => {
+    const [npm] = jobWith(/npm publish/);
+    expect(jobs[npm!]).not.toMatch(/pnpm install|npm (install|ci)\b|pnpm (build|exec)/);
+    expect(jobs[npm!]).toMatch(/npm publish --ignore-scripts/);
+    const [check] = jobWith(/pnpm ci:local/);
+    expect(jobs[check!]).toMatch(/uses: actions\/upload-artifact@[0-9a-f]{40} /);
+    expect(jobs[npm!]).toMatch(/uses: actions\/download-artifact@[0-9a-f]{40} /);
+    expect(jobs[npm!]).toMatch(new RegExp(`needs: \\[[^\\]]*\\b${check}\\b`));
+    for (const block of Object.values(jobs).filter((b) => /curl /.test(b))) expect(block).toMatch(/[0-9a-f]{64} +\S+" \| sha256sum -c/);
   });
 });
