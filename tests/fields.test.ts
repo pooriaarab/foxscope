@@ -1,8 +1,9 @@
 // I1-I4, I9, G11, P4 and R4 in docs/failure-modes.md: the checks on what an
 // agent sends, on rule globs, and on the field list a resolver returns.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isFieldGlob, matchGlob, parseRequest, siteOf } from "../src/index.js";
-import { parseFieldList } from "../src/fields.js";
+import { parseFieldList, visible } from "../src/fields.js";
 
 const ok = { agent: "https://shop.example", fields: ["demo.shopping.size.top"], purpose: "Pick a size" };
 const problem = (input: unknown) => {
@@ -92,5 +93,17 @@ describe("siteOf", () => {
       ["unknown", "unknown"],
     ];
     expect(cases.map(([agent]) => siteOf(agent))).toEqual(cases.map(([, site]) => site));
+  });
+});
+
+describe("visible", () => {
+  it("C5: escapes control, format, line and paragraph separator, filler and tag characters, and keeps other text", () => {
+    const hidden = ["\u0000", "\u001B", "\u007F", "\u009F", "\u00AD", "\u061C", "\u200B", "\u200F", "\u202E", "\u2028", "\u2029", "\u2066", "\u3164", "\uFEFF", "\uFFA0", "\u{E0000}", "\u{E0001}", "\u{E0041}", "\u{E007F}"];
+    for (const c of hidden) expect(visible(`a${c}b`)).toBe(`a\\u{${c.codePointAt(0)!.toString(16)}}b`);
+    expect(visible("Größe 42 € 日本 🦊")).toBe("Größe 42 € 日本 🦊");
+  });
+
+  it("C5: the approval page uses it", () => {
+    expect(readFileSync("extension/approve.js", "utf8")).toMatch(/import \{[^}]*\bvisible\b[^}]*\} from "\.\.\/src\/fields\.ts"/);
   });
 });

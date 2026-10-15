@@ -1,6 +1,7 @@
 // The foxscope command. runCli is the whole CLI; bin.ts only wires it to the process.
 import { parseArgs } from "node:util";
 import { ScopeError } from "./errors.js";
+import { visible } from "./fields.js";
 import { startMcp } from "./mcp.js";
 import { loadResolvers, openScope } from "./node.js";
 import type { Grant, PendingRequest, ReadNotice } from "./types.js";
@@ -45,10 +46,6 @@ const seconds = (value: string | undefined): number | undefined => {
   return Number(value);
 };
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
-
-/** Text an agent wrote, with control, bidi and invisible characters as \u{...} escapes, so it shows what it holds (C5). */
-// oxlint-disable-next-line no-control-regex
-const visible = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, (c) => `\\u{${c.codePointAt(0)!.toString(16)}}`);
 
 function describeGrant(g: Grant): string {
   return `${g.id}  ${visible(g.agent)}  ${g.fields.join(", ")}${g.derive ? " (smaller answers)" : ""}  until ${g.expiresAt}  via ${g.via}\n  Purpose: ${visible(JSON.stringify(g.purpose))}\n`;

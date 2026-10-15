@@ -116,6 +116,19 @@ describe("foxscope CLI", () => {
     expect(approved.out).toContain("Purpose: \"Pick\\u{200b} clothes\\u{2066}\"");
   });
 
+  it("C5: shows the soft hyphen, the Arabic letter mark, line separators, Hangul fillers and tag characters as escapes", async () => {
+    const run = cli();
+    const hidden = ["\u00AD", "\u061C", "\u2028", "\u2029", "\u3164", "\uFFA0", "\u{E0001}", "\u{E0041}", "\u{E007F}"];
+    const agent = `shop${hidden.join("")}agent`;
+    const asked = await run("--demo", "request", agent, "demo.shopping.size.top", "--purpose", `Pick${hidden.join("")}`);
+    expect(asked.code).toBe(0);
+    const listed = await run("--demo", "pending");
+    const escaped = "\\u{ad}\\u{61c}\\u{2028}\\u{2029}\\u{3164}\\u{ffa0}\\u{e0001}\\u{e0041}\\u{e007f}";
+    expect(listed.out).toContain(`shop${escaped}agent`);
+    expect(listed.out).toContain(`Purpose: "Pick${escaped}"`);
+    expect(listed.out).not.toMatch(/[\u00AD\u061C\u2028\u2029\u3164\uFFA0]|[\u{E0000}-\u{E007F}]/u);
+  });
+
   it("adds, lists and removes standing rules, and revokes an agent", async () => {
     const run = cli();
     const added = await run("rules", "add", "shop-agent", "demo.shopping.**", "--ttl", "3600");
