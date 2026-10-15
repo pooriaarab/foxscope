@@ -46,16 +46,20 @@ const seconds = (value: string | undefined): number | undefined => {
 };
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
+/** Text an agent wrote, with control, bidi and invisible characters as \u{...} escapes, so it shows what it holds (C5). */
+// oxlint-disable-next-line no-control-regex
+const visible = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, (c) => `\\u{${c.codePointAt(0)!.toString(16)}}`);
+
 function describeGrant(g: Grant): string {
-  return `${g.id}  ${g.agent}  ${g.fields.join(", ")}${g.derive ? " (smaller answers)" : ""}  until ${g.expiresAt}  via ${g.via}\n  Purpose: ${JSON.stringify(g.purpose)}\n`;
+  return `${g.id}  ${visible(g.agent)}  ${g.fields.join(", ")}${g.derive ? " (smaller answers)" : ""}  until ${g.expiresAt}  via ${g.via}\n  Purpose: ${visible(JSON.stringify(g.purpose))}\n`;
 }
 
 const SHORT_DIGEST = 12;
 const shortDigest = (r: PendingRequest) => r.digest.slice(0, SHORT_DIGEST);
 
 function describeRequest(r: PendingRequest): string {
-  const fields = r.fields.map((f) => `  - ${f.name} (${f.label}, ${f.sensitivity}${f.derivable ? ", has a smaller answer" : ""})\n`).join("");
-  return `${r.id}  ${r.agent}  wants ${r.ttlSeconds ? `${r.ttlSeconds} s` : "the default time (1 hour)"}, waits until ${r.expiresAt}\n  Purpose: ${JSON.stringify(r.purpose)}\n${fields}  Digest: ${shortDigest(r)}\n`;
+  const fields = r.fields.map((f) => `  - ${f.name} (${visible(f.label)}, ${f.sensitivity}${f.derivable ? ", has a smaller answer" : ""})\n`).join("");
+  return `${r.id}  ${visible(r.agent)}  wants ${r.ttlSeconds ? `${r.ttlSeconds} s` : "the default time (1 hour)"}, waits until ${r.expiresAt}\n  Purpose: ${visible(JSON.stringify(r.purpose))}\n${fields}  Digest: ${shortDigest(r)}\n`;
 }
 
 const OPTIONS = {
@@ -108,10 +112,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
         if (sub === "add") {
           if (r.length < 2 || ttl === undefined) throw new UsageError("rules add needs <agent> <field-glob> --ttl <seconds>");
           const rule = await scope.addRule({ agent: r[0]!, fields: r[1]!, maxTtlSeconds: ttl, derive: v.derive });
-          io.stdout(`Added rule ${rule.id}: ${rule.agent} may read ${rule.fields} for up to ${rule.maxTtlSeconds} s${rule.derive ? " (smaller answers)" : ""}.\n`);
+          io.stdout(`Added rule ${rule.id}: ${visible(rule.agent)} may read ${rule.fields} for up to ${rule.maxTtlSeconds} s${rule.derive ? " (smaller answers)" : ""}.\n`);
         } else if (sub === "list") {
           const rules = await scope.rules();
-          io.stdout(rules.length ? rules.map((x) => `${x.id}  ${x.agent} ${x.fields} up to ${x.maxTtlSeconds} s${x.derive ? " (smaller answers)" : ""}  ${x.source}\n`).join("") : "No rules.\n");
+          io.stdout(rules.length ? rules.map((x) => `${x.id}  ${visible(x.agent)} ${x.fields} up to ${x.maxTtlSeconds} s${x.derive ? " (smaller answers)" : ""}  ${x.source}\n`).join("") : "No rules.\n");
         } else if (sub === "remove") {
           if (!r[0]) throw new UsageError("rules remove needs <rule-id>");
           await scope.removeRule(r[0]);
@@ -153,7 +157,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
           return 1;
         }
         const g = await scope.approve(id, { digest: r.digest, ...(ttl === undefined ? {} : { ttlSeconds: ttl }), derive: v.derive });
-        io.stdout(`Approved for ${g.agent}: ${g.fields.join(", ")}${g.derive ? " (smaller answers)" : ""}\nPurpose: ${JSON.stringify(g.purpose)}\nThis is grant ${g.id}, until ${g.expiresAt}.\n`);
+        io.stdout(`Approved for ${visible(g.agent)}: ${g.fields.join(", ")}${g.derive ? " (smaller answers)" : ""}\nPurpose: ${visible(JSON.stringify(g.purpose))}\nThis is grant ${g.id}, until ${g.expiresAt}.\n`);
         return 0;
       }
       case "deny":
@@ -173,11 +177,11 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       case "revoke": {
         if (v.agent !== undefined) {
           const n = await scope.revokeAgent(v.agent);
-          io.stdout(`Revoked ${v.agent}: ${n.grants} grants, ${n.requests} waiting requests, ${n.rules} rules.\n`);
+          io.stdout(`Revoked ${visible(v.agent)}: ${n.grants} grants, ${n.requests} waiting requests, ${n.rules} rules.\n`);
         } else {
           need(1);
           const g = await scope.revoke(rest[0]!);
-          io.stdout(`Revoked ${g.id} (${g.agent}).\n`);
+          io.stdout(`Revoked ${g.id} (${visible(g.agent)}).\n`);
         }
         return 0;
       }
@@ -190,7 +194,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       }
       default: {
         // trail
-        for (const e of await scope.trail.entries()) io.stdout(`${e.seq}  ${new Date(e.ts).toISOString()}  ${e.actor}  ${e.kind}  ${JSON.stringify(e.data)}\n`);
+        for (const e of await scope.trail.entries()) io.stdout(`${e.seq}  ${new Date(e.ts).toISOString()}  ${visible(e.actor)}  ${e.kind}  ${visible(JSON.stringify(e.data))}\n`);
         if (v.verify) {
           const result = await scope.verifyTrail();
           if (!result.ok) {
