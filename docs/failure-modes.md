@@ -42,7 +42,7 @@ in doubt, refuse, and say why.
 | G1 | A read on an expired grant | `expired`, and no values | tests/read.test.ts, E2E |
 | G2 | A read on a revoked grant | `revoked`, and no values | tests/read.test.ts, E2E |
 | G3 | A read asks for a field that the grant does not hold | `field-not-granted` | tests/read.test.ts |
-| G4 | A read on an unknown grant id, or on a grant of another agent | `no-grant`. The two look the same, so an agent cannot probe other grants | tests/read.test.ts, tests/mcp.test.ts |
+| G4 | A read on an unknown grant id, or on a grant of another agent | `no-grant`. The two look the same, so an agent cannot probe other grants. No trail entry, so a page cannot flood the trail with guesses | tests/read.test.ts, tests/mcp.test.ts |
 | G5 | The clock goes back | foxscope keeps the latest time it saw, so an expired grant stays expired | tests/read.test.ts |
 | G6 | The approval page shows one request and another one is approved | `approve` takes the digest the page showed. A different digest fails with `request-changed` | tests/approve.test.ts |
 | G7 | An agent changes the fields or the purpose after an approval | It is a new request and needs a new approval. A grant covers only its own fields and purpose | tests/approve.test.ts |
