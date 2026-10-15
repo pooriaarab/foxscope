@@ -277,11 +277,14 @@ export function createScope(o: ScopeOptions) {
         state.rules.push(rule);
         return rule;
       }),
+    /** Remove a user rule, and revoke the live grants it made. */
     removeRule: (ruleId: string): Promise<void> =>
-      change(async (state) => {
+      change(async (state, now) => {
         const rule = state.rules.find((r) => r.id === ruleId);
         if (!rule) throw new ScopeError("not-found", `no user rule ${ruleId}`);
-        await log("user", "scent.rule.remove", { ruleId, agent: rule.agent, fields: rule.fields });
+        const grants = state.grants.filter((g) => live(g, now) && g.ruleIds.includes(ruleId));
+        await log("user", "scent.rule.remove", { ruleId, agent: rule.agent, fields: rule.fields, grants: grants.length });
+        for (const g of grants) g.revokedAt = iso(now);
         state.rules = state.rules.filter((r) => r.id !== ruleId);
       }),
     rules: (): Promise<Rule[]> => change(async (state) => [...configRules, ...state.rules]),
