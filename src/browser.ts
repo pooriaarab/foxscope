@@ -31,7 +31,8 @@ export const KNOWN_RESOLVERS = [
 /**
  * What a web page gets for a refusal: the one word "denied". A reason such
  * as `private-field: x` or `resolver-failed: memory` would tell the page
- * which fields and add-ons the user has. The reason stays in the trail.
+ * which kind of refusal it was. The reason stays in the trail. A page can
+ * still tell a field the user has (pending) from one they do not (E12).
  */
 export const PAGE_REFUSAL = "denied";
 
