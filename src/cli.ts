@@ -117,7 +117,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
           io.stderr(`foxscope: denied: ${answer.reason}\n`);
           return 1;
         }
-        if (answer.status === "pending") io.stdout(`pending ${answer.requestId}. The user approves with: foxscope approve ${answer.requestId}\n`);
+        if (answer.status === "pending") io.stdout(`pending ${answer.requestId}. The user approves with: foxscope ${v.demo ? "--demo " : ""}approve ${answer.requestId}\n`);
         else io.stdout(`granted ${answer.grantId} until ${answer.expiresAt}\n${json(answer.values)}`);
         return 0;
       }
