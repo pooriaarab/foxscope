@@ -91,6 +91,7 @@ in doubt, refuse, and say why.
 | S3 | The process stops in the middle of a write | foxscope writes a temp file and renames it, so `state.json` is always whole | tests/node.test.ts |
 | S4 | A crashed process leaves the lock file | After 10 s the next writer takes the lock | tests/node.test.ts |
 | S6 | A slow resolver (up to 5 s per call) keeps a process inside the lock until another process counts the lock as stale, takes it, and saves a revoke or a rule removal. The first process then saves the state it loaded before, and the revoke is undone | No resolver call or notice runs under the lock. A request, a read and an approval ask the resolvers between two locked steps; the second step loads the state again and checks it again (the grant, the rule, the waiting request), so a revoke, a rule removal or a deny that came meanwhile holds | tests/lock-race.test.ts |
+| S7 | A stored date is not a time (for example `expiresAt: "garbage"`). `Date.parse` gives NaN, every `<=` check is false, and an expiry check lets the grant through | Each date in the state must be an exact ISO time (`toISOString()` gives it back), and every other field must have its type, when the store loads. Anything else is `corrupt-store`, and nothing is read | tests/state.test.ts |
 | S5 | `FOXSCOPE_HOME` is not set | `~/.foxscope`, made with mode 0700. The files have mode 0600 | tests/node.test.ts |
 
 ## CLI and MCP server
