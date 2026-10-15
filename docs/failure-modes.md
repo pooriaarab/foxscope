@@ -89,6 +89,7 @@ in doubt, refuse, and say why.
 | S2 | The CLI approves while the MCP server writes | A lock file orders the writers, so no change is lost | tests/node.test.ts |
 | S3 | The process stops in the middle of a write | foxscope writes a temp file and renames it, so `state.json` is always whole | tests/node.test.ts |
 | S4 | A crashed process leaves the lock file | After 10 s the next writer takes the lock | tests/node.test.ts |
+| S6 | A slow resolver (up to 5 s per call) keeps a process inside the lock until another process counts the lock as stale, takes it, and saves a revoke or a rule removal. The first process then saves the state it loaded before, and the revoke is undone | No resolver call or notice runs under the lock. A request, a read and an approval ask the resolvers between two locked steps; the second step loads the state again and checks it again (the grant, the rule, the waiting request), so a revoke, a rule removal or a deny that came meanwhile holds | tests/lock-race.test.ts |
 | S5 | `FOXSCOPE_HOME` is not set | `~/.foxscope`, made with mode 0700. The files have mode 0600 | tests/node.test.ts |
 
 ## CLI and MCP server
