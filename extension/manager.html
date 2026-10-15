@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>foxscope</title><link rel="stylesheet" href="style.css"></head>
+<body class="manager">
+  <header><img class="mark" src="icons/icon-48.png" alt="" width="22" height="22"><h1>foxscope</h1></header>
+  <p class="note">What each agent may read, for how long, and every use. Revoke anything at any time.</p>
+
+  <h2>Live grants</h2>
+  <div id="grants" class="list"><p class="note empty">No agent can read anything now.</p></div>
+
+  <h2>Waiting requests</h2>
+  <div id="pending" class="list"><p class="note empty">Nothing waits for you.</p></div>
+
+  <h2>Standing rules</h2>
+  <div id="rules" class="list"><p class="note empty">No standing rules. Every request asks you.</p></div>
+  <fieldset>
+    <legend>Add a rule</legend>
+    <p class="note">The agent gets matching fields without a question, for at most this time (1 hour is the most for a web page). Private fields are never given.</p>
+    <div class="row">
+      <label>Agent <input id="rule-agent" type="text" placeholder="https://shop.example"></label>
+      <label>Fields <input id="rule-fields" type="text" placeholder="demo.shopping.*"></label>
+    </div>
+    <div class="row">
+      <label>Up to <select id="rule-ttl"><option value="300">5 minutes</option><option value="900">15 minutes</option><option value="3600" selected>1 hour</option></select></label>
+      <label class="switch"><input id="rule-derive" type="checkbox"> Smaller answers only</label>
+    </div>
+    <button id="rule-add">Add rule</button> <span id="rule-status" class="note" role="status"></span>
+  </fieldset>
+
+  <h2>Recent reads</h2>
+  <ul id="notices" class="list plain"><li class="note empty">No agent has read anything yet.</li></ul>
+
+  <h2>Trail</h2>
+  <p class="row"><button id="verify">Verify the trail</button> <span id="verify-status" class="note" role="status"></span></p>
+  <table id="trail"><thead><tr><th>Time</th><th>Who</th><th>What</th><th>Details</th></tr></thead><tbody></tbody></table>
+
+  <h2>Context sources</h2>
+  <div id="resolvers" class="card"></div>
+  <script src="manager.js"></script>
+</body>
+</html>
