@@ -1,4 +1,4 @@
-// T1-T3 and P5 in docs/failure-modes.md: the tamper-evident trail.
+// T1-T4 and P5 in docs/failure-modes.md: the tamper-evident trail.
 import { describe, expect, it } from "vitest";
 import { MemoryStore, type Entry, type Store } from "foxtrail";
 import { SIZES, setup, shop } from "./helpers.js";
@@ -19,6 +19,21 @@ describe("trail", () => {
     const actors = (await entries()).map((e) => e.actor);
     expect(actors).toEqual([shop.agent, shop.agent, "user", shop.agent, "user", shop.agent, shop.agent, "user"]);
     expect(await scope.verifyTrail()).toMatchObject({ ok: true, count: 8 });
+  });
+
+  it("T4: each grant entry says which agent got it, and why", async () => {
+    const { scope, entries } = await setup({ rules: [{ agent: shop.agent, fields: "demo.shopping.**", maxTtlSeconds: 600 }] });
+    await scope.request(shop);
+    await scope.request({ ...shop, agent: "mcp-agent", fields: ["demo.profile.name"], purpose: "Say hello" });
+    const asked = await scope.request({ ...shop, fields: ["demo.travel.home"], purpose: "Plan a trip" });
+    if (asked.status !== "pending") throw new Error("expected pending");
+    await scope.approve(asked.requestId);
+    const grants = (await entries()).filter((e) => e.kind === "scent.grant").map((e) => [e.actor, (e.data as Record<string, unknown>).agent, (e.data as Record<string, unknown>).purpose]);
+    expect(grants).toEqual([
+      ["rule", shop.agent, shop.purpose],
+      ["public", "mcp-agent", "Say hello"],
+      ["user", shop.agent, "Plan a trip"],
+    ]);
   });
 
   it("P5: the trail holds field names, not values", async () => {

@@ -61,6 +61,7 @@ in doubt, refuse, and say why.
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
 | T1 | An action leaves no trace | Each request, refusal, grant, denial, read, refused read, revoke and rule change adds one foxtrail entry | tests/trail.test.ts |
+| T4 | A grant entry does not say who got the grant or why. For a rule or a public grant the actor is `rule` or `public`, and the purpose never reaches the trail | Each `scent.grant` entry holds the agent and the purpose, whoever granted it | tests/trail.test.ts |
 | T2 | The trail cannot be written | The action fails and returns no values. foxscope writes the trail before it reads a value | tests/trail.test.ts |
 | T3 | Someone edits the trail | `verifyTrail()` returns `ok: false` with the index of the first bad entry | tests/trail.test.ts, E2E |
 
