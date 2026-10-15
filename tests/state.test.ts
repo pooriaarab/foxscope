@@ -9,6 +9,7 @@ const good = (): ScopeState => ({
   lastNow: Date.parse(AT),
   rules: [{ id: "rule-1", agent: "a", fields: "demo.**", maxTtlSeconds: 60, derive: false, source: "user", createdAt: AT }],
   grants: [{ id: "g-1", agent: "a", fields: ["demo.travel.home"], purpose: "p", derive: false, via: "user", ruleIds: [], createdAt: AT, expiresAt: "2026-10-15T13:00:00.000Z" }],
+  rate: { "shop.example": { times: [Date.parse(AT)], refusedAt: Date.parse(AT) } },
   requests: [{ id: "r-1", agent: "a", fields: [{ name: "demo.travel.home", label: "Home city", sensitivity: "ask" }], purpose: "p", digest: "0".repeat(64), createdAt: AT, expiresAt: "2026-10-15T12:10:00.000Z" }],
 });
 
@@ -41,6 +42,10 @@ describe("parseState", () => {
       (s) => void (s.requests[0]!.expiresAt = "garbage"),
       (s) => void (s.requests[0]!.ttlSeconds = 1.5),
       (s) => void (s.requests[0]!.fields = [{ name: "x" }] as never),
+      (s) => void (s.rate = [] as never),
+      (s) => void (s.rate["shop.example"] = [Date.parse(AT)] as never),
+      (s) => void (s.rate["shop.example"]!.times = ["soon"] as never),
+      (s) => void (s.rate["shop.example"]!.refusedAt = "soon" as never),
     ];
     for (const change of bad) {
       const s = good();

@@ -3,7 +3,7 @@
 import { ScopeError } from "./errors.js";
 import type { Grant, PendingRequest, Rule, ScentField, ScopeState, ScopeStore } from "./types.js";
 
-export const emptyState = (): ScopeState => ({ version: 1, lastNow: 0, rules: [], grants: [], requests: [] });
+export const emptyState = (): ScopeState => ({ version: 1, lastNow: 0, rules: [], grants: [], requests: [], rate: {} });
 
 const str = (x: unknown): x is string => typeof x === "string";
 const strings = (x: unknown) => Array.isArray(x) && x.every(str);
@@ -42,7 +42,11 @@ export function parseState(value: unknown, where = "the store"): ScopeState {
     Array.isArray(s.requests) &&
     s.rules.every(rule) &&
     s.grants.every(grant) &&
-    s.requests.every(request);
+    s.requests.every(request) &&
+    typeof s.rate === "object" &&
+    s.rate !== null &&
+    !Array.isArray(s.rate) &&
+    Object.values(s.rate).every((r) => Array.isArray(r?.times) && r.times.every((t) => Number.isFinite(t)) && (r.refusedAt === undefined || Number.isFinite(r.refusedAt)));
   if (!ok) throw new ScopeError("corrupt-store", `${where} does not hold a foxscope state (version 1). foxscope does not overwrite it. Move it away to start again.`);
   return structuredClone(s as ScopeState);
 }

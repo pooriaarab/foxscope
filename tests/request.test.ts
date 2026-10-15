@@ -1,6 +1,7 @@
-// I1, I5-I8, P1 and G17 in docs/failure-modes.md: what an agent can ask for.
+// I1, I5-I9, P1 and G17 in docs/failure-modes.md: what an agent can ask for.
 // tests/fields.test.ts checks each bad shape; here the scope must refuse and log.
 import { describe, expect, it } from "vitest";
+import { createScope, demoResolver, parseState } from "../src/index.js";
 import { setup, shop } from "./helpers.js";
 
 const denied = (reason: string) => ({ status: "denied", reason: expect.stringMatching(new RegExp(`^${reason}`)) });
@@ -56,15 +57,41 @@ describe("request", () => {
     expect(c).not.toEqual(a);
   });
 
-  it("I7: limits a flood, and logs only the first refusal", async () => {
-    const { scope, clock, kinds } = await setup();
+  it("I7: limits a flood, logs only the first refusal, and keeps 30 times at most", async () => {
+    const { scope, clock, kinds, store } = await setup();
     for (let i = 0; i < 30; i++) expect((await scope.request({ ...shop, fields: ["demo.nope"] })).status).toBe("denied");
-    expect(await scope.request(shop)).toEqual(denied("rate-limited"));
-    expect(await scope.request(shop)).toEqual(denied("rate-limited"));
+    for (let i = 0; i < 100; i++) expect(await scope.request(shop)).toEqual(denied("rate-limited"));
     expect((await kinds()).length).toBe(31);
+    expect(Object.values(parseState(await store.load()).rate).map((r) => r.times.length)).toEqual([30]);
     expect(await scope.request({ ...shop, agent: "other" })).toMatchObject({ status: "pending" });
     clock.advance(61);
     expect(await scope.request(shop)).toMatchObject({ status: "pending" });
+  });
+
+  it("I9: subdomains of one site share one limit, and other sites are not touched", async () => {
+    const { scope, kinds } = await setup();
+    for (let i = 0; i < 30; i++) expect((await scope.request({ ...shop, agent: `https://s${i}.evil.example`, fields: ["demo.nope"] })).status).toBe("denied");
+    expect(await scope.request({ ...shop, agent: "https://new.evil.example" })).toEqual(denied("rate-limited"));
+    expect(await scope.request({ ...shop, agent: "https://evil.example" })).toEqual(denied("rate-limited"));
+    expect((await kinds()).length).toBe(31);
+    expect(await scope.request(shop)).toMatchObject({ status: "pending" });
+  });
+
+  it("I9: the limit holds after a restart (a new scope on the same store)", async () => {
+    const { scope, store, trail, clock } = await setup();
+    for (let i = 0; i < 30; i++) await scope.request({ ...shop, fields: ["demo.nope"] });
+    const again = createScope({ resolvers: [demoResolver()], store, trail, now: clock.now });
+    expect(await again.request(shop)).toEqual(denied("rate-limited"));
+    clock.advance(61);
+    expect(await again.request(shop)).toMatchObject({ status: "pending" });
+  });
+
+  it("I9: one site cannot hold more than 3 waiting requests, so it cannot block the others", async () => {
+    const { scope, kinds } = await setup();
+    for (let i = 0; i < 3; i++) expect((await scope.request({ ...shop, agent: `https://s${i}.evil.example`, purpose: `p${i}` })).status).toBe("pending");
+    expect(await scope.request({ ...shop, agent: "https://s9.evil.example", purpose: "p9" })).toEqual(denied("too-many-pending"));
+    expect(await scope.request(shop)).toMatchObject({ status: "pending" });
+    expect((await kinds()).filter((k) => k === "scent.refuse")).toHaveLength(1);
   });
 
   it("I8: refuses a 51st waiting request", async () => {
