@@ -68,8 +68,9 @@ docs/failure-modes.md  every way the code can fail, written before the code
 .github/          CI, release, PR and issue standards
 extension/        the extension that shows this repo working in Firefox
 scripts/build-ext.mjs  bundles extension/ into dist-ext/ (release) or, with --e2e, dist-e2e/
+                  (the same, with the page API also on 127.0.0.1 and localhost)
 e2e/run.mjs       the Firefox E2E test on dist-e2e/; writes artifacts/e2e-<date>.json
-e2e/extension/    E2E-only extension parts; never in dist-ext/
+e2e/site/         the shop agent page that the E2E test drives
 ```
 
 ## Commands
@@ -101,5 +102,6 @@ before it signs it, so the GitHub release links to the listing and has no
 `.xpi`. It needs the secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. Keep the
 `version` in `extension/manifest.json` equal to the one in `package.json`.
 `pnpm check:amo` checks the listing and the release build in `dist-ext/`;
-it runs in `pnpm ci:local`. Keep test-only parts in `e2e/extension/`. If a
+it runs in `pnpm ci:local`. Keep test-only parts out of `extension/`; the
+E2E build only adds local hosts to the content script. If a
 release re-run finds the version already listed on AMO, it skips the upload.
