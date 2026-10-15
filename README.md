@@ -102,11 +102,11 @@ Checked on 2026-10-15 against the [Solid Protocol](https://solidproject.org/TR/p
 
 | Surface | Status | Verified by |
 |---|---|---|
-| Library (`foxscope`) | Implemented | 78 vitest tests for the failure modes in `docs/failure-modes.md` |
+| Library (`foxscope`) | Implemented | 98 vitest tests for the failure modes in `docs/failure-modes.md` |
 | Node store (`foxscope/node`) | Implemented | Lock, atomic write and corrupt-store tests on real files |
 | CLI (`foxscope`) | Implemented | Tests through `runCli` |
 | MCP server (`foxscope mcp`) | Implemented | Tests with the MCP SDK client over its in-memory transport |
-| Firefox extension | Implemented | Firefox E2E, local and on Ichabod |
+| Firefox extension | Implemented | Firefox E2E, local and on Ichabod; release.yml runs it on Ichabod before it publishes |
 | foxprefs and foxpack resolvers | Wired, not yet run | Message tests with stand-ins; the packages are not published yet |
 
 ## The SCENT contract
