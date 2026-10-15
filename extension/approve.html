@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>foxscope: allow this request?</title><link rel="stylesheet" href="style.css"></head>
+<body>
+  <header><img class="mark" src="icons/icon-48.png" alt="" width="22" height="22"><h1>Share your context?</h1></header>
+  <p class="note">An agent asks to read these fields. It gets only what you allow here, until the time runs out or you revoke it.</p>
+  <section id="request" class="ask" hidden>
+    <div class="ask-head"><span class="site-icon" id="icon"></span><span class="site" id="agent"></span></div>
+    <p class="purpose">Purpose: <q id="purpose"></q></p>
+    <ul class="fields" id="fields"></ul>
+    <label class="time">For <select id="ttl"></select></label>
+    <div class="answers">
+      <button id="deny" class="ghost">Deny</button>
+      <button id="smaller" hidden disabled>Approve smaller answers</button>
+      <button id="approve" class="primary" disabled>Approve</button>
+    </div>
+    <p class="note small-note" id="smaller-note" hidden>"Smaller answers" gives a range or a yes/no in place of the exact value, where a field has one.</p>
+  </section>
+  <p id="decision" class="decision" role="status"></p>
+  <script src="approve.js"></script>
+</body>
+</html>
