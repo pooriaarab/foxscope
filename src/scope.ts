@@ -19,6 +19,12 @@ export interface ScopeOptions {
   now?: () => number;
   /** How long a resolver may take. Default: 5000 ms. */
   resolverTimeoutMs?: number;
+  /**
+   * Grant `public` fields without asking. Default: false, so every field
+   * needs an approval or a standing rule. Turn it on only for local agents
+   * that the user starts; the extension leaves it off for web pages.
+   */
+  grantPublic?: boolean;
 }
 
 export const DEFAULT_TTL_SECONDS = 3600;
@@ -150,7 +156,7 @@ export function createScope(o: ScopeOptions) {
   }
 
   return Object.freeze({
-    /** An agent asks for fields. Granted at once when every field is public or under a standing rule, else pending. */
+    /** An agent asks for fields. Granted at once when standing rules cover every field (or it is public, with grantPublic), else pending. */
     async request(input: ScentRequest): Promise<ScentResponse> {
       const given = (input as Partial<ScentRequest> | null)?.agent;
       const agent = typeof given === "string" && given.trim() ? given.slice(0, 200) : "unknown";
@@ -181,7 +187,7 @@ export function createScope(o: ScopeOptions) {
         const rules = [...configRules, ...state.rules].filter((r) => r.agent === req.agent);
         const covering = new Set<Rule>();
         const covered = info.every((f) => {
-          if (f.sensitivity === "public") return true;
+          if (o.grantPublic && f.sensitivity === "public") return true;
           const r = rules.find((rule) => matchGlob(rule.fields, f.name));
           if (r) covering.add(r);
           return Boolean(r);
