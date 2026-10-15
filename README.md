@@ -34,7 +34,7 @@ npx foxscope --demo read g-<id>
 npx foxscope trail --verify
 ```
 
-`request` prints `pending r-<id>` and the command to approve it. `approve --derive` gives the smaller answers.
+`request` prints `pending r-<id>` and the command to approve it. `approve` prints the whole request (agent, fields, purpose, time and a digest) and asks `[y/N]`; `--derive` gives the smaller answers. In a script, with no terminal, add `--yes --digest <the 12 characters it showed>`.
 `read` prints `{"demo.shopping.size.top": "M", "demo.shopping.budget": "100-250 CAD"}`, and a notice on stderr.
 `trail --verify` lists three entries (request, grant, read) and ends with `Trail OK: 3 entries`.
 
@@ -168,7 +168,7 @@ foxscope [--demo] rules add <agent> <field-glob> --ttl <seconds> [--derive]
 foxscope rules list | rules remove <rule-id>
 foxscope [--demo] request <agent> <field>... --purpose "<why>" [--ttl <seconds>]
 foxscope pending
-foxscope [--demo] approve <request-id> [--ttl <seconds>] [--derive]
+foxscope [--demo] approve <request-id> [--ttl <seconds>] [--derive] [--yes --digest <12 hex>]
 foxscope deny <request-id>
 foxscope grants
 foxscope [--demo] read <grant-id> [<field>...]
