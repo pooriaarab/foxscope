@@ -227,7 +227,7 @@ pnpm e2e         # the Firefox E2E; FOXKIT_BROWSER=ichabod runs it on Ichabod
 - An MCP agent is the name its client reports. foxscope cannot check it, so any local program can claim another client's name and use its grants and rules.
 - foxprefs and foxpack are not on npm yet, so they are not declared as optional peers. Install them next to foxscope with npm. Under pnpm, foxscope cannot import a package it does not declare.
 - One event page owns the extension state. Do not run a second scope on the same storage.
-- A read with an unknown grant id is not logged, so a page cannot fill the trail with guesses.
+- The trail can grow fast. Through requests, one site adds at most 31 entries a minute (30 requests and one rate-limit refusal), and a site with many registrable domains gets that much for each. A site that holds a grant adds one entry, and shows one notice, for each read of it, with no limit; revoke the grant to stop it. A read with a guessed grant id adds nothing.
 - The rate limit (30 requests a minute) and the waiting list (3 requests) count per site, in the stored state, so a restart does not reset them. For a page, the site is a guess at the registrable domain, because an extension has no Public Suffix List: the last two labels of the host, or three under a common second level such as `co.uk`. The guess groups too much rather than too little, so every `*.github.io` page shares one limit. A domain whose owner gives out subdomains under a second level that is not on that list (for example `co.example`) gets one limit per subdomain. A site with many registrable domains gets one limit for each.
 - There are no quiet hours for notices. foxscope shows each read.
 
