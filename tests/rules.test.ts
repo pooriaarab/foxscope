@@ -1,4 +1,4 @@
-// G8-G11 and G14 in docs/failure-modes.md: standing rules and revoking an agent.
+// G8-G11, G14 and G16 in docs/failure-modes.md: standing rules and revoking an agent.
 import { describe, expect, it } from "vitest";
 import { ScopeError } from "../src/index.js";
 import { SIZES, setup, shop } from "./helpers.js";
@@ -13,6 +13,21 @@ describe("standing rules", () => {
     expect(await scope.request(shop)).toMatchObject({ status: "granted", values: { "demo.shopping.size.top": "M" } });
     const grant = (await entries()).find((e) => e.kind === "scent.grant");
     expect(grant).toMatchObject({ actor: "rule", data: { via: "rule", ruleIds: [rule.id], fields: SIZES } });
+  });
+
+  it("G16: removing a rule ends the grants it made, and only those", async () => {
+    const { scope, entries } = await setup();
+    const rule = await scope.addRule({ agent: shop.agent, fields: "demo.shopping.**", maxTtlSeconds: 86_400 });
+    const byRule = await scope.request(shop);
+    if (byRule.status !== "granted") throw new Error("expected granted");
+    const asked = await scope.request({ ...shop, fields: ["demo.travel.home"], purpose: "Trip" });
+    if (asked.status !== "pending") throw new Error("expected pending");
+    const byUser = await scope.approve(asked.requestId);
+    await scope.removeRule(rule.id);
+    expect(await code(scope.read(byRule.grantId))).toBe("revoked");
+    expect((await scope.list()).map((g) => g.id)).toEqual([byUser.id]);
+    expect((await entries()).find((e) => e.kind === "scent.rule.remove")?.data).toMatchObject({ ruleId: rule.id, grants: 1 });
+    expect(await scope.request(shop)).toMatchObject({ status: "pending" });
   });
 
   it("G8: a rule that covers some fields gives pending for all", async () => {

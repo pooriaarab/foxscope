@@ -144,7 +144,7 @@ In Node, the CLI imports `foxprefs` and `foxpack` when they are installed next t
 | `scope.read(grantId, fields?, { agent? })` | The values. Pass `agent` when an agent calls, so it cannot use another agent's grant. |
 | `scope.revoke(grantId, { agent? })`, `scope.revokeAgent(agent)` | End one grant, or every grant, waiting request and rule of an agent. |
 | `scope.list({ agent? })`, `scope.pending()` | Live grants and waiting requests. |
-| `scope.addRule({ agent, fields, maxTtlSeconds, derive? })`, `scope.removeRule(id)`, `scope.rules()` | Standing rules. `fields` is a glob: `*` is one segment, a final `**` is the rest. It starts with a fixed namespace. |
+| `scope.addRule({ agent, fields, maxTtlSeconds, derive? })`, `scope.removeRule(id)`, `scope.rules()` | Standing rules. `fields` is a glob: `*` is one segment, a final `**` is the rest. It starts with a fixed namespace. Removing a rule revokes the live grants it made. |
 | `scope.fields()` | Every field of every resolver, with the error of a resolver that fails. |
 | `scope.verifyTrail()` | Checks the trail chain. |
 | `memoryStore()`, `storageAreaStore(area)` | Stores for tests and for `browser.storage.local`. |
