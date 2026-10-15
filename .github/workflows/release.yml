@@ -1,5 +1,7 @@
 # main = staging, release = production.
 # Merge main into release to publish the version in package.json to npm.
+# Promote with a merge commit, never a squash: a squash leaves release with
+# a commit main lacks, and the next promotion then conflicts.
 name: Release
 
 on:
