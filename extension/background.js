@@ -70,8 +70,17 @@ const pageHandlers = {
   },
 };
 
-// From the extension's own pages: the approval page.
+// From the extension's own pages.
 const uiHandlers = {
+  async "ui.state"() {
+    const s = await scope();
+    const fields = await s.fields();
+    const resolvers = KNOWN_RESOLVERS.map((r) => {
+      const found = fields.find((f) => f.namespace === r.namespace);
+      return { name: r.name, namespace: r.namespace, installed: !found?.error, fields: found?.fields.length ?? 0, error: found?.error };
+    });
+    return { grants: await s.list(), pending: await s.pending(), rules: await s.rules(), notices: await get("fsc:notices", []), resolvers, demo: await demoOn(), now: Date.now() };
+  },
   "ui.request": async ({ requestId }) => (await (await scope()).pending()).find((r) => r.id === requestId) ?? null,
   async "ui.approve"({ requestId, digest, ttlSeconds, derive }) {
     const s = await scope();
@@ -88,6 +97,13 @@ const uiHandlers = {
     await answerTab(requestId, { status: "denied", reason: "the user denied the request" });
     return true;
   },
+  "ui.revoke": async ({ grantId }) => (await scope()).revoke(grantId),
+  "ui.revokeAgent": async ({ agent }) => (await scope()).revokeAgent(agent),
+  "ui.addRule": async ({ rule }) => (await scope()).addRule(rule),
+  "ui.removeRule": async ({ ruleId }) => (await scope()).removeRule(ruleId),
+  "ui.trail": async () => (await openTrail()).entries(),
+  "ui.verify": async () => (await scope()).verifyTrail(),
+  "ui.demo": async ({ on }) => store.set({ "fsc:demo": on === true }),
 };
 
 const ownPage = (sender) => typeof sender.url === "string" && sender.url.startsWith(browser.runtime.getURL(""));
@@ -113,3 +129,5 @@ browser.runtime.onMessage.addListener((msg, sender) => {
     (error) => ({ ok: false, code: error?.code ?? "error", error: error instanceof Error ? error.message : String(error) }),
   );
 });
+
+browser.action.onClicked.addListener(() => browser.runtime.openOptionsPage());
