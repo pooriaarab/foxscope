@@ -55,6 +55,7 @@ in doubt, refuse, and say why.
 | G14 | The user revokes an agent | Its grants are revoked, its pending requests are dropped, and its standing rules are removed, so the next request asks again | tests/rules.test.ts |
 | G15 | `approve` gets a time over 30 days | `bad-ttl` | tests/approve.test.ts |
 | G16 | The user removes a standing rule, and the grants it made stay live until they expire (up to the rule's longest time) | Removing a rule revokes every live grant that the rule made. The trail entry counts them. Grants the user approved stay | tests/rules.test.ts |
+| G17 | Any https page gets every `public` field at once, with no approval window, for as long as it asks | A scope grants `public` fields without asking only when it is made with `grantPublic: true`. The CLI and the MCP server (local agents the user starts) set it; the extension does not, so a web page gets nothing without an approval or a standing rule | tests/request.test.ts, tests/cli.test.ts, E2E |
 
 ## Trail
 

@@ -64,14 +64,15 @@ agent: request(fields, purpose, ttl)
   -> check the shape            -> denied: bad-request
   -> ask each field's resolver  -> denied: unknown-field / private-field
   -> live grant for the same fields and purpose?  -> granted (values)
-  -> every field public or under a standing rule? -> granted (values)
+  -> every field under a standing rule?           -> granted (values)
+     (or public, for a local agent: grantPublic)
   -> else pending: the user approves (bound to the request digest) or denies
 
 read(grant): live and not revoked? -> trail entry -> notice -> resolver values
 ```
 
 1. **Scope.** A field name is `<namespace>.<path>`, for example `prefs.shopping.size.top`. A field goes to the resolver of its namespace only.
-2. **Consent.** The user approves one exact request, or a standing rule names the agent, a field glob and a longest time. A changed purpose or field list is a new request.
+2. **Consent.** The user approves one exact request, or a standing rule names the agent, a field glob and a longest time. A changed purpose or field list is a new request. A `public` field needs no approval only in a scope made with `grantPublic: true`: the CLI and the MCP server set it for the local agents you start. The extension does not, so a web page gets nothing, public fields included, without your approval or a standing rule.
 3. **Exchange.** A read returns only the granted fields. A `derive` grant gives the smaller answer, for example a budget band in place of the number.
 4. **Notice.** foxscope calls `notify` before it reads a value. If the notice fails, the read fails.
 5. **Trail.** Each request, refusal, grant, denial, read, refused read, revoke and rule change is a [foxtrail](https://github.com/pooriaarab/foxtrail) entry. The trail holds field names and ids, never values.
@@ -137,7 +138,7 @@ In Node, the CLI imports `foxprefs` and `foxpack` when they are installed next t
 
 | Export | What it does |
 |---|---|
-| `createScope({ resolvers, store, trail, rules?, notify?, now?, resolverTimeoutMs? })` | Returns a scope. `trail` is a foxtrail `Log`. `rules` are standing rules from your config. `notify` runs before each read. |
+| `createScope({ resolvers, store, trail, rules?, notify?, now?, resolverTimeoutMs?, grantPublic? })` | Returns a scope. `trail` is a foxtrail `Log`. `rules` are standing rules from your config. `notify` runs before each read. `grantPublic` (default false) grants `public` fields without asking; use it for local agents only. |
 | `scope.request(req)` | Returns a `ScentResponse`. Policy refusals are `denied` with a reason. |
 | `scope.approve(requestId, { ttlSeconds?, derive?, digest? })` | The user's yes. Pass the `digest` you showed. Returns the grant. Default time: what the agent asked, else 1 hour. |
 | `scope.deny(requestId)` | The user's no. |

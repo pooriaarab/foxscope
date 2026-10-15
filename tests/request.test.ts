@@ -1,4 +1,4 @@
-// I1, I5-I8 and P1 in docs/failure-modes.md: what an agent can ask for.
+// I1, I5-I8, P1 and G17 in docs/failure-modes.md: what an agent can ask for.
 // tests/fields.test.ts checks each bad shape; here the scope must refuse and log.
 import { describe, expect, it } from "vitest";
 import { setup, shop } from "./helpers.js";
@@ -36,11 +36,14 @@ describe("request", () => {
     expect(entry).toMatchObject({ actor: shop.agent, kind: "scent.request", data: { requestId: pending?.id, fields: shop.fields, purpose: shop.purpose } });
   });
 
-  it("grants public fields without asking", async () => {
-    const { scope, notices } = await setup();
-    const answer = await scope.request({ ...shop, fields: ["demo.profile.name"] });
+  it("G17: a public field waits for the user, unless the scope grants public fields", async () => {
+    const page = await setup();
+    expect(await page.scope.request({ ...shop, fields: ["demo.profile.name"] })).toMatchObject({ status: "pending" });
+    expect(page.notices).toHaveLength(0);
+    const local = await setup({ grantPublic: true });
+    const answer = await local.scope.request({ ...shop, fields: ["demo.profile.name"] });
     expect(answer).toMatchObject({ status: "granted", values: { "demo.profile.name": "Sam Fox" } });
-    expect(notices).toHaveLength(1);
+    expect(local.notices).toHaveLength(1);
   });
 
   it("I6: gives the same id for the same waiting request", async () => {
