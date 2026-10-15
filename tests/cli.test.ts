@@ -7,15 +7,28 @@ import { runCli } from "../src/cli.js";
 
 const missing = (name: string) => Promise.reject(Object.assign(new Error(`Cannot find package '${name}' imported from x`), { code: "ERR_MODULE_NOT_FOUND" }));
 
-function cli() {
+/** The CLI on one FOXSCOPE_HOME. `answers` play a person at a terminal; without them stdin is not a terminal. */
+function cli(answers?: boolean[]) {
   const env = { FOXSCOPE_HOME: mkdtempSync(join(tmpdir(), "fsc-cli-")) };
   return async (...argv: string[]) => {
     let out = "";
     let err = "";
-    const code = await runCli(argv, { env, stdout: (s) => void (out += s), stderr: (s) => void (err += s), importModule: missing });
-    return { code, out, err };
+    const asked: string[] = [];
+    const confirm = answers && (async (question: string) => (asked.push(question), answers.shift() ?? false));
+    const code = await runCli(argv, { env, stdout: (s) => void (out += s), stderr: (s) => void (err += s), importModule: missing, ...(confirm ? { confirm } : {}) });
+    return { code, out, err, asked };
   };
 }
+
+/** approve printed the whole request first. */
+function shown(out: string) {
+  expect(out).toMatch(/shop-agent .*600 s/);
+  expect(out).toContain('Purpose: "Pick clothes"');
+  expect(out).toContain("demo.shopping.size.top (Top size, ask)");
+  expect(out).toMatch(/Digest: [0-9a-f]{12}/);
+}
+
+const digestOf = (out: string) => /Digest: ([0-9a-f]{12})/.exec(out)?.[1];
 
 describe("foxscope CLI", () => {
   it("C1: usage and exit 2 for a bad command or a missing argument", async () => {
@@ -38,7 +51,9 @@ describe("foxscope CLI", () => {
     expect(pending.out).toContain(id);
     expect(pending.out).toMatch(/shop-agent .*Pick clothes/s);
     expect(pending.out).toContain("demo.shopping.budget (Monthly clothes budget, ask, has a smaller answer)");
-    const approved = await run("--demo", "approve", id!, "--derive");
+    const digest = digestOf(pending.out);
+    expect(digest).toMatch(/^[0-9a-f]{12}$/);
+    const approved = await run("--demo", "approve", id!, "--derive", "--yes", "--digest", digest!);
     expect(approved.code).toBe(0);
     expect(approved.out).toMatch(/Approved for shop-agent: demo.shopping.size.top, demo.shopping.budget \(smaller answers\)/);
     expect(approved.out).toContain('Purpose: "Pick clothes"');
@@ -52,6 +67,36 @@ describe("foxscope CLI", () => {
     const trail = await run("trail", "--verify");
     expect(trail.out).toMatch(/scent.request.*scent.grant.*scent.read.*scent.revoke/s);
     expect(trail.out).toMatch(/Trail OK: 4 entries/);
+  });
+
+  it("C4: approve shows the whole request and asks first; no answer, no grant", async () => {
+    const asked = async (run: ReturnType<typeof cli>) => /pending (r-[0-9a-f]+)/.exec((await run("--demo", "request", "shop-agent", "demo.shopping.size.top", "--purpose", "Pick clothes", "--ttl", "600")).out)![1]!;
+    const no = cli([false]);
+    const r1 = await asked(no);
+    const refused = await no("--demo", "approve", r1);
+    shown(refused.out);
+    expect(refused.asked).toEqual(["Approve this request? [y/N] "]);
+    expect(refused.code).toBe(1);
+    expect((await no("grants")).out).toBe("No live grants.\n");
+
+    const yes = cli([true]);
+    const r2 = await asked(yes);
+    const approved = await yes("--demo", "approve", r2);
+    shown(approved.out);
+    expect(approved).toMatchObject({ code: 0, out: expect.stringContaining("Approved for shop-agent") });
+
+    const script = cli();
+    const r3 = await asked(script);
+    const blind = await script("--demo", "approve", r3);
+    shown(blind.out);
+    expect(blind.code).toBe(1);
+    expect(blind.err).toMatch(/Not approved. Check the request above, then run: foxscope --demo approve r-[0-9a-f]+ --yes --digest [0-9a-f]{12}/);
+    expect((await script("--demo", "approve", r3, "--yes")).code).toBe(2);
+    expect(await script("--demo", "approve", r3, "--yes", "--digest", "000000000000")).toMatchObject({ code: 1, err: expect.stringContaining("request-changed") });
+    expect((await script("--demo", "approve", r3, "--yes", "--digest", "abc")).code).toBe(2);
+    expect((await script("grants")).out).toBe("No live grants.\n");
+    const digest = digestOf(blind.out)!;
+    expect((await script("--demo", "approve", r3, "--yes", "--digest", digest)).code).toBe(0);
   });
 
   it("adds, lists and removes standing rules, and revokes an agent", async () => {

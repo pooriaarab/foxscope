@@ -11,6 +11,8 @@ export interface CliIo {
   stderr: (text: string) => void;
   /** For tests: how foxprefs and foxpack are imported. */
   importModule?: (name: string) => Promise<Record<string, unknown>>;
+  /** Asks the person at the terminal a yes/no question. Absent when stdin is not a terminal. */
+  confirm?: (question: string) => Promise<boolean>;
 }
 
 export const USAGE = `Usage: foxscope [--demo] <command>
@@ -20,7 +22,7 @@ export const USAGE = `Usage: foxscope [--demo] <command>
   rules remove <rule-id>
   request <agent> <field>... --purpose "<why>" [--ttl <seconds>]
   pending
-  approve <request-id> [--ttl <seconds>] [--derive]
+  approve <request-id> [--ttl <seconds>] [--derive] [--yes --digest <12 hex>]
   deny <request-id>
   grants
   read <grant-id> [<field>...]
@@ -29,6 +31,8 @@ export const USAGE = `Usage: foxscope [--demo] <command>
   trail [--verify]
   mcp                     the MCP server on stdio; the agent is the MCP client name
 
+approve shows the request and asks. Without a terminal, pass --yes and the
+--digest that approve or pending showed.
 --demo adds the demo resolver (made-up values in the "demo" namespace).
 State and trail: FOXSCOPE_HOME, else ~/.foxscope.
 `;
@@ -46,9 +50,12 @@ function describeGrant(g: Grant): string {
   return `${g.id}  ${g.agent}  ${g.fields.join(", ")}${g.derive ? " (smaller answers)" : ""}  until ${g.expiresAt}  via ${g.via}\n  Purpose: ${JSON.stringify(g.purpose)}\n`;
 }
 
+const SHORT_DIGEST = 12;
+const shortDigest = (r: PendingRequest) => r.digest.slice(0, SHORT_DIGEST);
+
 function describeRequest(r: PendingRequest): string {
   const fields = r.fields.map((f) => `  - ${f.name} (${f.label}, ${f.sensitivity}${f.derivable ? ", has a smaller answer" : ""})\n`).join("");
-  return `${r.id}  ${r.agent}  wants ${r.ttlSeconds ? `${r.ttlSeconds} s` : "the default time (1 hour)"}, waits until ${r.expiresAt}\n  Purpose: ${JSON.stringify(r.purpose)}\n${fields}`;
+  return `${r.id}  ${r.agent}  wants ${r.ttlSeconds ? `${r.ttlSeconds} s` : "the default time (1 hour)"}, waits until ${r.expiresAt}\n  Purpose: ${JSON.stringify(r.purpose)}\n${fields}  Digest: ${shortDigest(r)}\n`;
 }
 
 const OPTIONS = {
@@ -58,6 +65,8 @@ const OPTIONS = {
   purpose: { type: "string" },
   agent: { type: "string" },
   verify: { type: "boolean", default: false },
+  yes: { type: "boolean", default: false },
+  digest: { type: "string" },
   help: { type: "boolean", short: "h", default: false },
 } as const;
 const parse = (argv: string[]) => parseArgs({ args: argv, allowPositionals: true, options: OPTIONS });
@@ -129,7 +138,21 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       }
       case "approve": {
         need(1);
-        const g = await scope.approve(rest[0]!, { ...(ttl === undefined ? {} : { ttlSeconds: ttl }), derive: v.derive });
+        const id = rest[0]!;
+        if (v.yes !== (v.digest !== undefined)) throw new UsageError("--yes and --digest go together: --yes --digest <the 12 characters approve showed>");
+        if (v.digest !== undefined && !new RegExp(`^[0-9a-f]{${SHORT_DIGEST}}$`).test(v.digest)) throw new UsageError(`--digest takes the ${SHORT_DIGEST} characters that approve or pending showed`);
+        // Show the request first: the agent wrote the id, so the user must see what it is (C4).
+        const r = (await scope.pending()).find((x) => x.id === id);
+        if (!r) throw new ScopeError("not-found", `no waiting request ${id}`);
+        io.stdout(describeRequest(r));
+        io.stdout(`You give: ${ttl === undefined ? "the time above" : `${ttl} s`}${v.derive ? ", smaller answers" : ""}.\n`);
+        if (v.digest !== undefined) {
+          if (v.digest !== shortDigest(r)) throw new ScopeError("request-changed", `request ${id} has digest ${shortDigest(r)}, not ${v.digest}`);
+        } else if (!(await io.confirm?.("Approve this request? [y/N] "))) {
+          io.stderr(io.confirm ? "Not approved.\n" : `Not approved. Check the request above, then run: foxscope ${v.demo ? "--demo " : ""}approve ${id} --yes --digest ${shortDigest(r)}\n`);
+          return 1;
+        }
+        const g = await scope.approve(id, { digest: r.digest, ...(ttl === undefined ? {} : { ttlSeconds: ttl }), derive: v.derive });
         io.stdout(`Approved for ${g.agent}: ${g.fields.join(", ")}${g.derive ? " (smaller answers)" : ""}\nPurpose: ${JSON.stringify(g.purpose)}\nThis is grant ${g.id}, until ${g.expiresAt}.\n`);
         return 0;
       }
