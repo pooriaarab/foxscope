@@ -19,7 +19,7 @@ in doubt, refuse, and say why.
 | I4 | `ttlSeconds` is not a whole number, is 0 or less, or is over 30 days | `denied`, reason `bad-request: ttlSeconds ...` | tests/fields.test.ts |
 | I5 | A field name has no resolver, or its resolver does not list it | `denied`, reason `unknown-field: <name>` | tests/request.test.ts |
 | I6 | An agent sends the same request again while it waits | The same `requestId`; no second pending entry | tests/request.test.ts |
-| I7 | An agent floods requests | After 30 requests in one minute from one site (I9): `denied` `rate-limited`. Only the first refusal in that minute goes to the trail, so a flood cannot fill it | tests/request.test.ts |
+| I7 | An agent floods requests | After 30 requests in one minute from one site (I9): `denied` `rate-limited`. Only the first refusal in that minute goes to the trail | tests/request.test.ts |
 | I8 | More than 50 requests wait at one time | `denied` `too-many-pending` | tests/request.test.ts |
 | I9 | A page floods from many subdomains (each one a new origin), fills the shared waiting list so every other site gets `too-many-pending`, or waits out an event-page restart that resets the limiter | The limit and the waiting list count per site: a page origin is grouped by its registrable domain (`siteOf`), any other agent is its own site. One site gets 30 requests a minute and at most 3 waiting requests. The limiter is kept in the stored state, so a restart or a new process does not reset it | tests/request.test.ts, tests/fields.test.ts |
 
@@ -65,6 +65,7 @@ in doubt, refuse, and say why.
 |---|---|---|---|
 | T1 | An action leaves no trace | Each request, refusal, grant, denial, read, refused read, revoke and rule change adds one foxtrail entry | tests/trail.test.ts |
 | T4 | A grant entry does not say who got the grant or why. For a rule or a public grant the actor is `rule` or `public`, and the purpose never reaches the trail | Each `scent.grant` entry holds the agent and the purpose, whoever granted it | tests/trail.test.ts |
+| T5 | The README says a page cannot fill the trail, which is true only for guessed grant ids | The README states the real bound: through requests one site adds at most 31 entries a minute (30 requests and one rate-limit refusal); a site with a grant adds one entry, and one notice, per read of it, with no limit; a guessed grant id adds none | tests/trail.test.ts |
 | T2 | The trail cannot be written | The action fails and returns no values. foxscope writes the trail before it reads a value | tests/trail.test.ts |
 | T3 | Someone edits the trail | `verifyTrail()` returns `ok: false` with the index of the first bad entry | tests/trail.test.ts, E2E |
 
