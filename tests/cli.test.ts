@@ -33,7 +33,7 @@ describe("foxscope CLI", () => {
     const asked = await run("--demo", "request", "shop-agent", "demo.shopping.size.top", "demo.shopping.budget", "--purpose", "Pick clothes", "--ttl", "600");
     expect(asked.code).toBe(0);
     const id = /pending (r-[0-9a-f]+)/.exec(asked.out)?.[1];
-    expect(asked.out).toContain(`foxscope approve ${id}`);
+    expect(asked.out).toContain(`foxscope --demo approve ${id}`);
     const pending = await run("pending");
     expect(pending.out).toContain(id);
     expect(pending.out).toMatch(/shop-agent .*Pick clothes/s);
