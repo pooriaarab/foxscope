@@ -184,7 +184,9 @@ Exit 0 is done, 1 is a refusal (the code goes to stderr), 2 is bad usage.
 ### MCP server
 
 `foxscope mcp` serves five tools on stdio: `scent_list_fields`, `scent_request`, `scent_read`, `scent_list_grants` and `scent_revoke`.
-The agent is the client name from the MCP handshake. A client sees and revokes only its own grants.
+The agent is the client name from the MCP handshake (`clientInfo.name`). The client reports that name itself, and nothing on stdio can prove it, so foxscope cannot authenticate it.
+Grants and rules are bound to that name. A client sees, reads and revokes only the grants of the name it gives, but any program you run that gives the same name gets the same grants and rules.
+So a rule for `claude-code` is a rule for every local program that says it is `claude-code`. Add a rule for an MCP agent only for fields you would give any program you run. `approve` shows the name before it asks.
 A waiting request returns the command the user runs, for example `foxscope approve r-1a2b3c4d5e6f`.
 After the approval, the agent calls `scent_request` again with the same fields and purpose.
 
@@ -222,6 +224,7 @@ pnpm e2e         # the Firefox E2E; FOXKIT_BROWSER=ichabod runs it on Ichabod
 - The trail is tamper-evident, not tamper-proof. Anyone with the trail key can rewrite it. In Node the key is `trail.key`, next to the trail.
 - A notice in Node is a line on stderr. The CLI and the MCP server show no desktop notification.
 - A page agent is an origin, so every script on that origin shares its grants.
+- An MCP agent is the name its client reports. foxscope cannot check it, so any local program can claim another client's name and use its grants and rules.
 - foxprefs and foxpack are not on npm yet, so they are not declared as optional peers. Install them next to foxscope with npm. Under pnpm, foxscope cannot import a package it does not declare.
 - One event page owns the extension state. Do not run a second scope on the same storage.
 - A read with an unknown grant id is not logged, so a page cannot fill the trail with guesses.

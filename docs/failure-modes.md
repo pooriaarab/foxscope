@@ -109,6 +109,7 @@ in doubt, refuse, and say why.
 | M1 | The MCP client sends no name | Every tool refuses: foxscope needs a name to scope the grants | tests/mcp.test.ts |
 | M2 | An MCP agent reads or revokes the grant of another agent | `no-grant` | tests/mcp.test.ts |
 | M3 | A request waits for the user | The tool result names the exact command: `foxscope approve <id>` | tests/mcp.test.ts |
+| M4 | A local program claims the MCP client name of another agent (stdio has no way to prove who the client is) | foxscope cannot stop it. Grants and rules are bound to the name the client reports, so the program gets that name's grants and rules. The README says so, the pending result tells the user which name the agent gave and that foxscope cannot check it, and `approve` shows that name before it asks | tests/mcp.test.ts |
 
 ## Extension and web pages
 
