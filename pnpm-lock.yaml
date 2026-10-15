@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      foxtrail:
+        specifier: ^0.1.4
+        version: 0.1.4
     devDependencies:
       '@types/node':
         specifier: ^24.19.1
@@ -1155,6 +1159,11 @@ packages:
 
   flatted@3.4.4:
     resolution: {integrity: sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q==}
+
+  foxtrail@0.1.4:
+    resolution: {integrity: sha512-XbJ+frYfyPHx25Xi7obIHUDJVclxGgRS32xEMdxIger0i33sePKw36Cl2GY0llHabNAh6YBWzDfxWWA9toRvKg==}
+    engines: {node: '>=24'}
+    hasBin: true
 
   fs-extra@11.4.1:
     resolution: {integrity: sha512-KYAb4c9BJQI6QqGKthV68OHe0badztdXJWKo0WtBA9IuCFPTKvE5ZdUBglP833aMjhaSPNO4A5j/EkzZtGlKjA==}
@@ -2986,6 +2995,8 @@ snapshots:
       keyv: 4.5.4
 
   flatted@3.4.4: {}
+
+  foxtrail@0.1.4: {}
 
   fs-extra@11.4.1:
     dependencies:
