@@ -86,6 +86,14 @@ describe("foxscope/node", () => {
     expect(one).toEqual({ resolvers: [fake], status: { foxprefs: "installed", foxpack: "not installed" } });
   });
 
+  it("R7: loads foxpack from its npm name, @pooriaarab/foxpack", async () => {
+    const fake = { namespace: "memory", list: async () => [], read: async () => ({}) };
+    const asked: string[] = [];
+    const got = await loadResolvers({ demo: false, importModule: (name) => { asked.push(name); return name === "@pooriaarab/foxpack" ? Promise.resolve({ memoryResolver: () => fake }) : missing(name); } });
+    expect(asked).toEqual(["foxprefs", "@pooriaarab/foxpack"]);
+    expect(got).toEqual({ resolvers: [fake], status: { foxprefs: "not installed", foxpack: "installed" } });
+  });
+
   it("R6: stops when a peer is there but broken", async () => {
     await expect(loadResolvers({ demo: false, importModule: async () => ({}) })).rejects.toThrow(/foxprefs is installed but has no prefsResolver\(\) export/);
     await expect(loadResolvers({ demo: false, importModule: inner })).rejects.toThrow(/zod/);
