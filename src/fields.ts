@@ -8,6 +8,14 @@ export const MAX_AGENT = 200;
 /** 30 days: the longest grant, rule or request time. */
 export const MAX_TTL_SECONDS = 30 * 24 * 3600;
 
+/**
+ * Text an agent wrote, with every character that hides or reorders text as a
+ * \u{...} escape, so the CLI and the approval page show what it holds (C5):
+ * controls, format characters (bidi marks, zero widths, the soft hyphen, tag
+ * characters), line and paragraph separators, and the Hangul fillers.
+ */
+export const visible = (text: string) => text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0\u{e0000}-\u{e007f}]/gu, (c) => `\\u{${c.codePointAt(0)!.toString(16)}}`);
+
 const SEGMENT = /^[A-Za-z0-9_-]+$/;
 const NAMESPACE = /^[a-z][a-z0-9-]*$/;
 
