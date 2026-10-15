@@ -1,7 +1,7 @@
 // The SCENT reference implementation: scope, consent, exchange, notice, trail.
 import { canonicalize, type Log, type VerifyResult } from "foxtrail";
 import { ScopeError } from "./errors.js";
-import { matchGlob, parseRequest, parseRule } from "./fields.js";
+import { MAX_TTL_SECONDS, matchGlob, parseRequest, parseRule } from "./fields.js";
 import { resolverSet } from "./resolvers.js";
 import { parseState } from "./state.js";
 import type { Grant, PendingRequest, ReadNotice, Rule, RuleInput, ScentRequest, ScentResolver, ScentResponse, ScopeState, ScopeStore } from "./types.js";
@@ -181,6 +181,30 @@ export function createScope(o: ScopeOptions) {
         return { status: "pending", requestId: pending.id };
       }),
 
+    /** The user approves one waiting request. Pass the digest you showed, to bind the approval to it. */
+    approve: (requestId: string, opts: { ttlSeconds?: number; derive?: boolean; digest?: string } = {}): Promise<Grant> =>
+      change(async (state, now) => {
+        const req = state.requests.find((r) => r.id === requestId);
+        if (!req) throw new ScopeError("not-found", `no waiting request ${requestId}`);
+        if (Date.parse(req.expiresAt) <= now) throw new ScopeError("expired", `request ${requestId} expired at ${req.expiresAt}`);
+        if (opts.digest !== undefined && opts.digest !== req.digest) throw new ScopeError("request-changed", `request ${requestId} is not the request that was shown`);
+        const ttl = opts.ttlSeconds ?? req.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+        if (!Number.isInteger(ttl) || ttl <= 0 || ttl > MAX_TTL_SECONDS) throw new ScopeError("bad-ttl", `ttlSeconds must be a whole number from 1 to ${MAX_TTL_SECONDS}`);
+        const fields = req.fields.map((f) => f.name);
+        const info = await resolvers.describe(fields);
+        if (typeof info === "string") throw new ScopeError(info.startsWith("private-field") ? "private-field" : info.startsWith("unknown-field") ? "unknown-field" : "resolver-failed", info);
+        state.requests = state.requests.filter((r) => r.id !== requestId);
+        return makeGrant(state, now, { agent: req.agent, fields, purpose: req.purpose, derive: opts.derive ?? false, via: "user", ruleIds: [], requestId, expiresAt: iso(now + ttl * 1000) }, "user");
+      }),
+
+    deny: (requestId: string): Promise<void> =>
+      change(async (state) => {
+        const req = state.requests.find((r) => r.id === requestId);
+        if (!req) throw new ScopeError("not-found", `no waiting request ${requestId}`);
+        await log("user", "scent.deny", { requestId, agent: req.agent, fields: req.fields.map((f) => f.name) });
+        state.requests = state.requests.filter((r) => r.id !== requestId);
+      }),
+
     /** Values for a live grant. Pass `agent` when an agent calls, so it cannot use another agent's grant. */
     read: (grantId: string, fields?: string[], opts: { agent?: string } = {}): Promise<Record<string, unknown>> => change((state, now) => readGrant(state, now, grantId, fields, opts.agent)),
 
@@ -195,9 +219,37 @@ export function createScope(o: ScopeOptions) {
         return structuredClone(g);
       }),
 
+    /** Revoke every grant of an agent, drop its waiting requests, and remove its standing rules. */
+    revokeAgent: (agent: string): Promise<{ grants: number; requests: number; rules: number }> =>
+      change(async (state, now) => {
+        const grants = state.grants.filter((g) => g.agent === agent && live(g, now));
+        const counts = { grants: grants.length, requests: state.requests.filter((r) => r.agent === agent).length, rules: state.rules.filter((r) => r.agent === agent).length };
+        await log("user", "scent.revoke", { agent, ...counts });
+        for (const g of grants) g.revokedAt = iso(now);
+        state.requests = state.requests.filter((r) => r.agent !== agent);
+        state.rules = state.rules.filter((r) => r.agent !== agent);
+        return counts;
+      }),
+
     /** Live grants: not revoked, not expired. */
     list: (opts: { agent?: string } = {}): Promise<Grant[]> => change(async (state, now) => state.grants.filter((g) => live(g, now) && (opts.agent === undefined || g.agent === opts.agent))),
     pending: (): Promise<PendingRequest[]> => change(async (state, now) => state.requests.filter((r) => Date.parse(r.expiresAt) > now)),
+
+    addRule: (input: RuleInput): Promise<Rule> =>
+      change(async (state, now) => {
+        const rule: Rule = { ...parseRule(input), id: id("rule"), source: "user", createdAt: iso(now) };
+        await log("user", "scent.rule.add", { ruleId: rule.id, agent: rule.agent, fields: rule.fields, maxTtlSeconds: rule.maxTtlSeconds, derive: rule.derive });
+        state.rules.push(rule);
+        return rule;
+      }),
+    removeRule: (ruleId: string): Promise<void> =>
+      change(async (state) => {
+        const rule = state.rules.find((r) => r.id === ruleId);
+        if (!rule) throw new ScopeError("not-found", `no user rule ${ruleId}`);
+        await log("user", "scent.rule.remove", { ruleId, agent: rule.agent, fields: rule.fields });
+        state.rules = state.rules.filter((r) => r.id !== ruleId);
+      }),
+    rules: (): Promise<Rule[]> => change(async (state) => [...configRules, ...state.rules]),
 
     /** Every field the resolvers list, private ones too. Show an agent only `sensitivity !== "private"`. */
     fields: () => resolvers.fields(),
