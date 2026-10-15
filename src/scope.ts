@@ -4,7 +4,7 @@ import { ScopeError } from "./errors.js";
 import { MAX_TTL_SECONDS, matchGlob, parseRequest, parseRule } from "./fields.js";
 import { resolverSet } from "./resolvers.js";
 import { parseState } from "./state.js";
-import type { Grant, PendingRequest, ReadNotice, Rule, RuleInput, ScentRequest, ScentResolver, ScentResponse, ScopeState, ScopeStore } from "./types.js";
+import type { Grant, PendingRequest, ReadNotice, Rule, RuleInput, ScentField, ScentRequest, ScentResolver, ScentResponse, ScopeState, ScopeStore } from "./types.js";
 
 export interface ScopeOptions {
   resolvers: ScentResolver[];
@@ -54,6 +54,9 @@ export function createScope(o: ScopeOptions) {
   const recent = new Map<string, number[]>();
 
   // One change at a time in this process; the store's lock orders processes.
+  // fn reads and changes the state and writes the trail, nothing slower: a
+  // resolver call or a notice never runs under the lock (S6). Code that needs
+  // one does it between two changes, and checks again in the second.
   let queue: Promise<unknown> = Promise.resolve();
   function change<T>(fn: (state: ScopeState, now: number) => Promise<T>): Promise<T> {
     const run = async () => {
@@ -75,6 +78,12 @@ export function createScope(o: ScopeOptions) {
     return next;
   }
 
+  /** The state as it is now, without the lock, for checks that change nothing. */
+  async function view<T>(fn: (state: ScopeState, now: number) => T): Promise<T> {
+    const state = parseState(await o.store.load(), o.store.name);
+    return fn(state, Math.max(clock(), state.lastNow));
+  }
+
   // JSON drops undefined; foxtrail refuses it.
   const log = (actor: string, kind: string, data: Record<string, unknown>) => trail.append({ actor, kind, data: JSON.parse(JSON.stringify(data)) });
 
@@ -86,8 +95,8 @@ export function createScope(o: ScopeOptions) {
     return times.length === RATE_LIMIT_PER_MINUTE + 1 ? "first" : "again";
   }
 
-  /** Check, log, notify, then resolve: the trail and the notice come before any value. */
-  async function readGrant(state: ScopeState, now: number, grantId: string, fields: string[] | undefined, agent: string | undefined): Promise<Record<string, unknown>> {
+  /** The grant an agent may read now, and the names to read. Logs and throws a refusal. */
+  async function checkGrant(state: ScopeState, now: number, grantId: string, fields: string[] | undefined, agent: string | undefined, info?: ScentField[] | string) {
     const grant = state.grants.find((g) => g.id === grantId && (agent === undefined || g.agent === agent));
     const refuse = async (code: ScopeError["code"], message: string): Promise<never> => {
       if (grant) await log(grant.agent, "scent.read.refused", { grantId, reason: code });
@@ -100,12 +109,27 @@ export function createScope(o: ScopeOptions) {
     if (!Array.isArray(names) || names.length === 0) return refuse("field-not-granted", "fields must be a non-empty array");
     const extra = names.find((n) => !grant.fields.includes(n));
     if (extra !== undefined) return refuse("field-not-granted", `grant ${grantId} does not hold ${String(extra)}`);
-    const info = await resolvers.describe(names);
     if (typeof info === "string") {
       const [code] = info.split(":") as [ScopeError["code"]];
       return refuse(code === "unknown-field" || code === "private-field" ? code : "resolver-failed", info);
     }
-    await log(grant.agent, "scent.read", { grantId, fields: names, derive: grant.derive });
+    return { grant: structuredClone(grant), names };
+  }
+
+  /** Check, log, notify, then resolve: the trail and the notice come before any value. */
+  async function readGrant(grantId: string, fields: string[] | undefined, agent: string | undefined): Promise<Record<string, unknown>> {
+    const { names } = await change((state, now) => checkGrant(state, now, grantId, fields, agent));
+    const info = await resolvers.describe(names);
+    // Check again: the grant may have been revoked while the resolvers answered.
+    const { grant } = await change(async (state, now) => {
+      const ok = await checkGrant(state, now, grantId, names, agent, info);
+      await log(ok.grant.agent, "scent.read", { grantId, fields: names, derive: ok.grant.derive });
+      return ok;
+    });
+    const refuse = async (code: ScopeError["code"], message: string): Promise<never> => {
+      await change(() => log(grant.agent, "scent.read.refused", { grantId, reason: code }));
+      throw new ScopeError(code, message);
+    };
     try {
       await o.notify?.({ agent: grant.agent, grantId, fields: names, purpose: grant.purpose, derive: grant.derive });
     } catch (error) {
@@ -127,29 +151,32 @@ export function createScope(o: ScopeOptions) {
 
   return Object.freeze({
     /** An agent asks for fields. Granted at once when every field is public or under a standing rule, else pending. */
-    request: (input: ScentRequest): Promise<ScentResponse> =>
-      change(async (state, now) => {
-        const given = (input as Partial<ScentRequest> | null)?.agent;
-        const agent = typeof given === "string" && given.trim() ? given.slice(0, 200) : "unknown";
+    async request(input: ScentRequest): Promise<ScentResponse> {
+      const given = (input as Partial<ScentRequest> | null)?.agent;
+      const agent = typeof given === "string" && given.trim() ? given.slice(0, 200) : "unknown";
+      const req = parseRequest(input);
+      const early = await change(async (_state, now): Promise<ScentResponse | null> => {
         const limit = overLimit(agent, now);
         if (limit !== "ok") {
           if (limit === "first") await log(agent, "scent.refuse", { reason: "rate-limited" });
           return { status: "denied", reason: "rate-limited: more than 30 requests in one minute" };
         }
-        const req = parseRequest(input);
         if (typeof req === "string") {
           await log(agent, "scent.refuse", { reason: "bad-request" });
           return { status: "denied", reason: `bad-request: ${req}` };
         }
-        const info = await resolvers.describe(req.fields);
+        return null;
+      });
+      if (early || typeof req === "string") return early!;
+      const info = await resolvers.describe(req.fields);
+      // The state may have changed while the resolvers answered, so decide on a fresh load.
+      const decided = await change(async (state, now): Promise<ScentResponse | Grant> => {
         if (typeof info === "string") {
           await log(req.agent, "scent.refuse", { reason: info, fields: req.fields });
           return { status: "denied", reason: info };
         }
-        const granted = async (g: Grant): Promise<ScentResponse> => ({ status: "granted", grantId: g.id, expiresAt: g.expiresAt, values: await readGrant(state, now, g.id, req.fields, req.agent) });
-
         const existing = state.grants.find((g) => g.agent === req.agent && g.purpose === req.purpose && live(g, now) && req.fields.every((f) => g.fields.includes(f)));
-        if (existing) return granted(existing);
+        if (existing) return existing;
 
         const rules = [...configRules, ...state.rules].filter((r) => r.agent === req.agent);
         const covering = new Set<Rule>();
@@ -163,8 +190,7 @@ export function createScope(o: ScopeOptions) {
           const caps = [...covering].map((r) => r.maxTtlSeconds);
           const ttl = Math.min(req.ttlSeconds ?? (caps.length ? Infinity : DEFAULT_TTL_SECONDS), ...caps);
           const via = covering.size ? "rule" : "public";
-          const g = await makeGrant(state, now, { agent: req.agent, fields: req.fields, purpose: req.purpose, derive: [...covering].some((r) => r.derive), via, ruleIds: [...covering].map((r) => r.id), expiresAt: iso(now + ttl * 1000) }, via);
-          return granted(g);
+          return makeGrant(state, now, { agent: req.agent, fields: req.fields, purpose: req.purpose, derive: [...covering].some((r) => r.derive), via, ruleIds: [...covering].map((r) => r.id), expiresAt: iso(now + ttl * 1000) }, via);
         }
 
         const waiting = state.requests.filter((r) => Date.parse(r.expiresAt) > now);
@@ -179,23 +205,32 @@ export function createScope(o: ScopeOptions) {
         await log(req.agent, "scent.request", { requestId: pending.id, fields: req.fields, purpose: req.purpose, ttlSeconds: req.ttlSeconds ?? null });
         state.requests.push(pending);
         return { status: "pending", requestId: pending.id };
-      }),
+      });
+      if ("status" in decided) return decided;
+      return { status: "granted", grantId: decided.id, expiresAt: decided.expiresAt, values: await readGrant(decided.id, req.fields, req.agent) };
+    },
 
     /** The user approves one waiting request. Pass the digest you showed, to bind the approval to it. */
-    approve: (requestId: string, opts: { ttlSeconds?: number; derive?: boolean; digest?: string } = {}): Promise<Grant> =>
-      change(async (state, now) => {
+    async approve(requestId: string, opts: { ttlSeconds?: number; derive?: boolean; digest?: string } = {}): Promise<Grant> {
+      const check = (state: ScopeState, now: number) => {
         const req = state.requests.find((r) => r.id === requestId);
         if (!req) throw new ScopeError("not-found", `no waiting request ${requestId}`);
         if (Date.parse(req.expiresAt) <= now) throw new ScopeError("expired", `request ${requestId} expired at ${req.expiresAt}`);
         if (opts.digest !== undefined && opts.digest !== req.digest) throw new ScopeError("request-changed", `request ${requestId} is not the request that was shown`);
         const ttl = opts.ttlSeconds ?? req.ttlSeconds ?? DEFAULT_TTL_SECONDS;
         if (!Number.isInteger(ttl) || ttl <= 0 || ttl > MAX_TTL_SECONDS) throw new ScopeError("bad-ttl", `ttlSeconds must be a whole number from 1 to ${MAX_TTL_SECONDS}`);
-        const fields = req.fields.map((f) => f.name);
-        const info = await resolvers.describe(fields);
+        return { req, ttl, fields: req.fields.map((f) => f.name) };
+      };
+      const { fields } = await view(check);
+      const info = await resolvers.describe(fields);
+      // Check again: the request may have been denied or dropped meanwhile.
+      return change(async (state, now) => {
+        const { req, ttl } = check(state, now);
         if (typeof info === "string") throw new ScopeError(info.startsWith("private-field") ? "private-field" : info.startsWith("unknown-field") ? "unknown-field" : "resolver-failed", info);
         state.requests = state.requests.filter((r) => r.id !== requestId);
         return makeGrant(state, now, { agent: req.agent, fields, purpose: req.purpose, derive: opts.derive ?? false, via: "user", ruleIds: [], requestId, expiresAt: iso(now + ttl * 1000) }, "user");
-      }),
+      });
+    },
 
     deny: (requestId: string): Promise<void> =>
       change(async (state) => {
@@ -206,7 +241,7 @@ export function createScope(o: ScopeOptions) {
       }),
 
     /** Values for a live grant. Pass `agent` when an agent calls, so it cannot use another agent's grant. */
-    read: (grantId: string, fields?: string[], opts: { agent?: string } = {}): Promise<Record<string, unknown>> => change((state, now) => readGrant(state, now, grantId, fields, opts.agent)),
+    read: (grantId: string, fields?: string[], opts: { agent?: string } = {}): Promise<Record<string, unknown>> => readGrant(grantId, fields, opts.agent),
 
     revoke: (grantId: string, opts: { agent?: string } = {}): Promise<Grant> =>
       change(async (state, now) => {
