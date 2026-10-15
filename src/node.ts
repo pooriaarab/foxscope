@@ -89,8 +89,9 @@ export async function openScope(o: Omit<ScopeOptions, "store" | "trail"> & { hom
 }
 
 const PEERS = [
-  { name: "foxprefs", factory: "prefsResolver" },
-  { name: "foxpack", factory: "memoryResolver" },
+  { name: "foxprefs", pkg: "foxprefs", factory: "prefsResolver" },
+  // npm refused the unscoped name foxpack as too similar to fixpack.
+  { name: "foxpack", pkg: "@pooriaarab/foxpack", factory: "memoryResolver" },
 ] as const;
 
 export type PeerStatus = Record<(typeof PEERS)[number]["name"], "installed" | "not installed">;
@@ -103,11 +104,11 @@ export async function loadResolvers(o: { demo: boolean; importModule?: (name: st
   for (const peer of PEERS) {
     let mod: Record<string, unknown>;
     try {
-      mod = await load(peer.name);
+      mod = await load(peer.pkg);
     } catch (error) {
       const e = error as NodeJS.ErrnoException;
       // Only "this package is missing" means not installed; a missing package inside it is an error.
-      if (e.code === "ERR_MODULE_NOT_FOUND" && e.message.includes(`'${peer.name}'`)) {
+      if (e.code === "ERR_MODULE_NOT_FOUND" && e.message.includes(`'${peer.pkg}'`)) {
         status[peer.name] = "not installed";
         continue;
       }
