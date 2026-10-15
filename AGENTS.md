@@ -93,7 +93,8 @@ the tests, then the code. Commit in that order.
 
 `main` is staging and `release` is production. A push to `release` runs
 `.github/workflows/release.yml`. It refuses a version that has a tag, runs
-`pnpm ci:local`, publishes to npm with the `NPM_TOKEN` secret, then tags
+`pnpm ci:local`, publishes the `dist/` that the check built to npm with the
+`NPM_TOKEN` secret (no install in that job), then tags
 `v<version>` and creates a GitHub release.
 
 After the npm publish, it submits `dist-ext/` to AMO as a listed add-on,
