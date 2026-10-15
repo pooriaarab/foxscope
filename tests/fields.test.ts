@@ -1,0 +1,73 @@
+// I1-I4, G11, P4 and R4 in docs/failure-modes.md: the checks on what an
+// agent sends, on rule globs, and on the field list a resolver returns.
+import { describe, expect, it } from "vitest";
+import { isFieldGlob, matchGlob, parseRequest } from "../src/index.js";
+import { parseFieldList } from "../src/fields.js";
+
+const ok = { agent: "https://shop.example", fields: ["demo.shopping.size.top"], purpose: "Pick a size" };
+const problem = (input: unknown) => {
+  const r = parseRequest(input);
+  return typeof r === "string" ? r : "ok";
+};
+
+describe("parseRequest", () => {
+  it("passes a good request and copies it", () => {
+    const fields = ["demo.a"];
+    const r = parseRequest({ ...ok, fields, ttlSeconds: 60, extra: "dropped" });
+    expect(r).toEqual({ ...ok, fields, ttlSeconds: 60 });
+    fields.push("demo.b");
+    expect(typeof r === "object" && r.fields).toEqual(["demo.a"]);
+  });
+
+  it("I1: refuses a bad agent", () => {
+    for (const agent of [undefined, "", "  ", "a".repeat(201), "bad\u0007agent", "line\nbreak", 7]) expect(problem({ ...ok, agent })).toMatch(/^agent/);
+    for (const input of [null, "text", [], 5]) expect(problem(input)).toBe("the request must be an object");
+  });
+
+  it("I2: refuses bad field lists", () => {
+    const many = Array.from({ length: 51 }, (_, i) => `demo.f${i}`);
+    for (const fields of [undefined, "demo.travel.home", [], many, ["demo.a", "demo.a"], ["nodot"], ["demo..x"], ["Demo.x"], ["demo.x y"], [3], [null]]) {
+      expect(problem({ ...ok, fields })).toMatch(/^fields/);
+    }
+    expect(problem({ ...ok, fields: many.slice(0, 50) })).toBe("ok");
+  });
+
+  it("I3: refuses a bad purpose", () => {
+    for (const purpose of [undefined, "", "   ", "x".repeat(501), 5]) expect(problem({ ...ok, purpose })).toMatch(/^purpose/);
+  });
+
+  it("I4: refuses a bad time limit", () => {
+    for (const ttlSeconds of [0, -5, 1.5, "60", null, 30 * 24 * 3600 + 1]) expect(problem({ ...ok, ttlSeconds })).toMatch(/^ttlSeconds/);
+    expect(problem({ ...ok, ttlSeconds: 30 * 24 * 3600 })).toBe("ok");
+  });
+});
+
+describe("rule globs", () => {
+  it("matches one segment with * and the rest with a final **", () => {
+    expect(matchGlob("demo.shopping.*", "demo.shopping.budget")).toBe(true);
+    expect(matchGlob("demo.shopping.*", "demo.shopping.size.top")).toBe(false);
+    expect(matchGlob("demo.shopping.**", "demo.shopping.size.top")).toBe(true);
+    expect(matchGlob("demo.shopping.**", "demo.shopping")).toBe(false);
+    expect(matchGlob("demo.travel.home", "demo.travel.home")).toBe(true);
+    expect(matchGlob("demo.travel", "demo.travel.home")).toBe(false);
+    expect(matchGlob("demo.*.top", "demo.size.top")).toBe(true);
+  });
+
+  it("G11: refuses a glob with no fixed namespace", () => {
+    for (const glob of ["**", "*.shopping", "demo", "demo.**.x", "demo..x", "Demo.x", "", 3]) expect(isFieldGlob(glob)).toBe(false);
+    for (const glob of ["demo.*", "demo.**", "prefs.shopping.size.*"]) expect(isFieldGlob(glob)).toBe(true);
+  });
+});
+
+describe("parseFieldList", () => {
+  it("R4: refuses a list in the wrong shape", () => {
+    for (const list of ["nope", null, [{ name: "x.a" }], [{ name: "x.a", label: "A", sensitivity: "secret" }], [{ name: "x", label: "A", sensitivity: "ask" }], [{ name: "x.a", label: "A", sensitivity: "ask", derivable: "yes" }]]) {
+      expect(() => parseFieldList("x", list)).toThrow();
+    }
+  });
+
+  it("P4: drops fields outside the resolver's namespace", () => {
+    const list = [{ name: "x.a", label: "A", sensitivity: "ask", derivable: true }, { name: "demo.health.allergies", label: "Allergies", sensitivity: "public" }];
+    expect(parseFieldList("x", list)).toEqual([{ name: "x.a", label: "A", sensitivity: "ask", derivable: true }]);
+  });
+});
