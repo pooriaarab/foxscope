@@ -61,6 +61,7 @@ function render(r) {
   $("smaller").hidden = !derivable;
   $("smaller-note").hidden = !derivable;
   $("request").hidden = false;
+  arm();
 }
 
 async function decide(kind) {
@@ -79,9 +80,31 @@ async function decide(kind) {
     if (win?.type === "popup") setTimeout(() => window.close(), 1500);
   } catch (error) {
     $("decision").textContent = `foxscope refused: ${error.message}`;
-    for (const b of document.querySelectorAll(".answers button")) b.disabled = false;
+    $("deny").disabled = false;
+    arm();
   }
 }
+
+// A page can open this window under the user's pointer and time a click on
+// it (E11). The approve buttons wake 1 s after the window is shown or gets
+// focus, and sleep again when it loses focus. Deny needs no delay.
+const ARM_MS = 1000;
+let armTimer;
+const setArmed = (on) => {
+  for (const id of ["approve", "smaller"]) $(id).disabled = !on;
+};
+function arm() {
+  setArmed(false);
+  clearTimeout(armTimer);
+  armTimer = setTimeout(() => setArmed(true), ARM_MS);
+}
+function disarm() {
+  clearTimeout(armTimer);
+  setArmed(false);
+}
+window.addEventListener("focus", arm);
+window.addEventListener("blur", disarm);
+document.addEventListener("visibilitychange", () => (document.hidden ? disarm() : arm()));
 
 $("approve").addEventListener("click", () => decide("approve"));
 $("smaller").addEventListener("click", () => decide("smaller"));
