@@ -59,7 +59,7 @@ describe("foxscope/node", () => {
     const dir = temp();
     const store = fileStore(join(dir, "state.json"));
     writeFileSync(join(dir, "state.json.123.tmp"), "half a write");
-    await store.lock!(async () => store.save({ version: 1, lastNow: 1, rules: [], grants: [], requests: [] }));
+    await store.lock!(async () => store.save({ version: 1, lastNow: 1, rules: [], grants: [], requests: [], rate: {} }));
     expect(await store.load()).toMatchObject({ version: 1, lastNow: 1 });
     expect(readdirSync(dir).toSorted()).toEqual(["state.json", "state.json.123.tmp"]);
   });
