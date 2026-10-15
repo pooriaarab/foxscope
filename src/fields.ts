@@ -41,7 +41,8 @@ export function siteOf(agent: string): string {
     return agent;
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return agent;
-  const host = url.hostname;
+  // "evil.com." is the same host as "evil.com".
+  const host = url.hostname.replace(/\.$/, "");
   if (host.startsWith("[") || /^[\d.]+$/.test(host) || !host.includes(".")) return host;
   const labels = host.split(".");
   const keep = labels.length >= 3 && labels.at(-1)!.length === 2 && SECOND_LEVEL.has(labels.at(-2)!) ? 3 : 2;
