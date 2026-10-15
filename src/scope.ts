@@ -144,7 +144,7 @@ export function createScope(o: ScopeOptions) {
 
   async function makeGrant(state: ScopeState, now: number, g: Omit<Grant, "id" | "createdAt">, actor: string): Promise<Grant> {
     const made: Grant = { id: id("g"), createdAt: iso(now), ...g };
-    await log(actor, "scent.grant", { grantId: made.id, via: made.via, ruleIds: made.ruleIds, requestId: made.requestId, fields: made.fields, derive: made.derive, expiresAt: made.expiresAt });
+    await log(actor, "scent.grant", { grantId: made.id, agent: made.agent, purpose: made.purpose, via: made.via, ruleIds: made.ruleIds, requestId: made.requestId, fields: made.fields, derive: made.derive, expiresAt: made.expiresAt });
     state.grants.push(made);
     return made;
   }
