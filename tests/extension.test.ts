@@ -1,5 +1,6 @@
-// E7, E9 and R5 in docs/failure-modes.md, for the extension: foxprefs and
+// E7, E9, E12 and R5 in docs/failure-modes.md, for the extension: foxprefs and
 // foxpack over runtime.sendMessage, and what a web page gets back.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { messageResolver, pageError, pageResponse, ScopeError, type SendMessage } from "../src/index.js";
 import { setup } from "./helpers.js";
@@ -56,6 +57,18 @@ describe("what a page gets back", () => {
     expect((await entries()).map((e) => (e.data as { reason: string }).reason)).toEqual(["private-field: demo.health.allergies", "unknown-field: demo.health.nothing", "unknown-field: memory.notes.x", "bad-request"]);
     const pending = await scope.request({ agent: page, fields: ["demo.travel.home"], purpose: "p" });
     expect(pageResponse(pending)).toEqual(pending);
+  });
+
+  it("E12: a page can tell a field the user has from one they do not have, and the listing says so", async () => {
+    const { scope } = await setup();
+    const page = "https://shop.example";
+    expect(pageResponse(await scope.request({ agent: page, fields: ["demo.travel.home"], purpose: "p" }))).toMatchObject({ status: "pending" });
+    for (const name of ["demo.travel.nothing", "memory.notes.x", "demo.health.allergies"]) {
+      expect(pageResponse(await scope.request({ agent: page, fields: [name], purpose: "p" }))).toEqual({ status: "denied", reason: "denied" });
+    }
+    const listing = JSON.parse(readFileSync("extension/amo-metadata.json", "utf8")).description["en-US"] as string;
+    expect(listing).not.toMatch(/not which fields you have|nor which add-ons/);
+    expect(listing).toContain("A page can tell a field you have from one you do not have");
   });
 
   it("E9: a thrown refusal or any other error is the same word", () => {
