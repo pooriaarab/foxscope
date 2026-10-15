@@ -224,6 +224,7 @@ pnpm e2e         # the Firefox E2E; FOXKIT_BROWSER=ichabod runs it on Ichabod
 - The trail is tamper-evident, not tamper-proof. Anyone with the trail key can rewrite it. In Node the key is `trail.key`, next to the trail.
 - A notice in Node is a line on stderr. The CLI and the MCP server show no desktop notification.
 - A page agent is an origin, so every script on that origin shares its grants.
+- A page can tell a field you have from one you do not have: a field you have gives `pending` and opens the approval window, a missing or private field, or a field of an add-on that is not installed, gives `denied` at once. So a page can learn which of foxprefs and foxpack you have, and which of their fields that are not private you keep. It gets no value without your approval.
 - An MCP agent is the name its client reports. foxscope cannot check it, so any local program can claim another client's name and use its grants and rules.
 - foxprefs and foxpack are not on npm yet, so they are not declared as optional peers. Install them next to foxscope with npm. Under pnpm, foxscope cannot import a package it does not declare.
 - One event page owns the extension state. Do not run a second scope on the same storage.
