@@ -1,6 +1,6 @@
 {
   "name": "foxscope",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Give AI agents only the context you grant: scoped, expiring grants with notice and a trail.",
   "type": "module",
   "license": "MIT",

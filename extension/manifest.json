@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "foxscope — context you grant",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Give AI agents only the context you grant: scoped, expiring grants with notice and a trail.",
   "icons": {
     "48": "icons/icon-48.png",
