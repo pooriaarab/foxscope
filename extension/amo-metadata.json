@@ -2,7 +2,7 @@
   "default_locale": "en-US",
   "slug": "foxscope",
   "name": {
-    "en-US": "foxscope"
+    "en-US": "foxscope — context you grant"
   },
   "summary": {
     "en-US": "Give AI agents only the context you grant: scoped, expiring grants with notice and a trail."
