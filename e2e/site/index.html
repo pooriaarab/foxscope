@@ -1,10 +1,57 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Fixture page</title>
-  </head>
-  <body>
-    <h1>Fixture page</h1>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <title>Fit Fox: a shop agent</title>
+  <style>
+    :root { color-scheme: light; font: 15px/1.5 system-ui, sans-serif; }
+    body { max-width: 620px; margin: 32px auto; padding: 0 16px; color: #2a2522; background: #fbf8f4; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .card { background: #fff; border: 1px solid #e7dfd6; border-radius: 14px; padding: 16px; margin-top: 16px; }
+    button { font: inherit; font-weight: 600; border: 1px solid #d9cfc4; background: #fff; border-radius: 10px; padding: 7px 14px; cursor: pointer; margin: 4px 6px 4px 0; }
+    button.primary { background: #e8772e; border-color: #e8772e; color: #fff; }
+    pre { background: #f3eee8; border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0 0; }
+    .muted { color: #776a60; }
+  </style>
+</head>
+<body>
+  <h1>Fit Fox</h1>
+  <p class="muted">A shop agent that asks your browser for your sizes and a budget through <code>window.scent</code>, and nothing else.</p>
+  <div class="card">
+    <button id="ask" class="primary">Find clothes that fit</button>
+    <button id="read">Read my sizes again</button>
+    <button id="give-back">Give the grant back</button>
+    <button id="ask-private">Ask for allergies</button>
+    <p id="status" class="muted" data-state="idle">Not asked yet.</p>
+    <pre id="result">{}</pre>
+  </div>
+  <script>
+    // The agent side of SCENT: ask, wait for the user's answer, read again.
+    const FIELDS = ["demo.shopping.size.top", "demo.shopping.size.shoe", "demo.shopping.budget"];
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+    let grantId = null;
+    function show(state, text, value) {
+      status.dataset.state = state;
+      status.textContent = text;
+      result.textContent = JSON.stringify(value ?? {}, null, 2);
+    }
+    async function run(state, text, work) {
+      show("waiting", text);
+      try {
+        const answer = await work();
+        if (answer?.status === "granted") grantId = answer.grantId;
+        if (answer?.status === "denied") return show("denied", `Denied: ${answer.reason}`, answer);
+        show(state, state === "granted" ? `Granted until ${answer.expiresAt}` : "Done.", answer?.values ?? answer);
+      } catch (error) {
+        show("error", error.message, { error: error.message });
+      }
+    }
+    document.getElementById("ask").onclick = () =>
+      run("granted", "Waiting for you to answer in foxscope...", () => window.scent.request({ fields: FIELDS, purpose: "Find clothes that fit you, inside your budget", ttlSeconds: 3600 }));
+    document.getElementById("read").onclick = () => run("read", "Reading...", async () => ({ values: await window.scent.read(grantId) }));
+    document.getElementById("give-back").onclick = () => run("read", "Giving it back...", async () => ({ values: { revoked: await window.scent.revoke(grantId) } }));
+    document.getElementById("ask-private").onclick = () => run("granted", "Asking...", () => window.scent.request({ fields: ["demo.health.allergies"], purpose: "Skip clothes with latex" }));
+  </script>
+</body>
 </html>
