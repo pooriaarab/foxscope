@@ -1,6 +1,7 @@
 // The foxscope command. runCli is the whole CLI; bin.ts only wires it to the process.
 import { parseArgs } from "node:util";
 import { ScopeError } from "./errors.js";
+import { startMcp } from "./mcp.js";
 import { loadResolvers, openScope } from "./node.js";
 import type { Grant, PendingRequest, ReadNotice } from "./types.js";
 
@@ -26,6 +27,7 @@ export const USAGE = `Usage: foxscope [--demo] <command>
   revoke <grant-id> | revoke --agent <agent>
   fields
   trail [--verify]
+  mcp                     the MCP server on stdio; the agent is the MCP client name
 
 --demo adds the demo resolver (made-up values in the "demo" namespace).
 State and trail: FOXSCOPE_HOME, else ~/.foxscope.
@@ -79,6 +81,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
   };
 
   try {
+    if (command === "mcp") {
+      await startMcp({ demo: v.demo, env: io.env });
+      return 0;
+    }
     const known = ["rules", "request", "pending", "approve", "deny", "grants", "read", "revoke", "fields", "trail"];
     if (!command || !known.includes(command)) throw new UsageError(command ? `unknown command: ${command}` : "no command");
     const ttl = seconds(v.ttl);
