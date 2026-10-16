@@ -130,7 +130,7 @@ export type ScentResponse =
 
 In Firefox, the foxscope extension sends `{type: "scent.list"}` and `{type: "scent.read", fields, derive}` to `foxprefs@pooriaarab` (namespace `prefs`) and `foxpack@pooriaarab` (namespace `memory`) with `runtime.sendMessage`.
 The answer is the value that `list()` or `read()` returns: a `ScentField[]` or a record of values.
-In Node, the CLI imports `foxprefs` and `@pooriaarab/foxpack` when they are installed next to foxscope, and calls `prefsResolver()` and `memoryResolver()`.
+In Node, the CLI imports `foxprefs` and `foxpack-ai` when they are installed next to foxscope, and calls `prefsResolver()` and `memoryResolver()`.
 
 ## Runtime surfaces
 
