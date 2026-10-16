@@ -91,7 +91,7 @@ export async function openScope(o: Omit<ScopeOptions, "store" | "trail"> & { hom
 const PEERS = [
   { name: "foxprefs", pkg: "foxprefs", factory: "prefsResolver" },
   // npm refused the unscoped name foxpack as too similar to fixpack.
-  { name: "foxpack", pkg: "@pooriaarab/foxpack", factory: "memoryResolver" },
+  { name: "foxpack", pkg: "foxpack-ai", factory: "memoryResolver" },
 ] as const;
 
 export type PeerStatus = Record<(typeof PEERS)[number]["name"], "installed" | "not installed">;
